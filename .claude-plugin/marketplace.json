@@ -1,0 +1,24 @@
+{
+  "name": "ypng-tools",
+  "description": "Claude Code plugins for local-first Jira tracking and product-management judgment",
+  "owner": {
+    "name": "MickeyJ"
+  },
+  "plugins": [
+    {
+      "name": "jira",
+      "source": "./jira",
+      "description": "Jira commands, skills, and agents"
+    },
+    {
+      "name": "jira3",
+      "source": "./jira3",
+      "description": "Local-first Jira tracking: task files are the source of truth; detached hooks mirror them to Jira with zero model cost. Done requires human approval."
+    },
+    {
+      "name": "product-brain",
+      "source": "./pm",
+      "description": "Gives Claude the context-awareness and judgment of a seasoned product manager. Calibrates decisions to the product's real stage and usage, evaluates proposals against purpose and priorities, and pushes back on speculative or mistimed work."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "site": "your-site.atlassian.net",
+  "projectKey": "ABC",
+  "labels": [],
+  "email": "you@example.com",
+  "tokenEnv": "JIRA_API_TOKEN",
+  "envFile": ".env",
+  "types": {
+    "epic": { "name": "Epic", "container": true },
+    "task": { "name": "Task", "default": true },
+    "feature": { "name": "Feature" },
+    "bug": { "name": "Bug" }
+  },
+  "statusMap": {
+    "todo": "To Do",
+    "in_progress": "In Progress",
+    "review": "Testing",
+    "done": "Done"
+  },
+  "github": {
+    "defaultBase": "main",
+    "epicPrefix": "epic/",
+    "remote": "origin"
+  }
+}

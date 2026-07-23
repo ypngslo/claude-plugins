@@ -1,0 +1,2 @@
+# test artifacts are self-cleaning; nothing generated is tracked
+.sync.log

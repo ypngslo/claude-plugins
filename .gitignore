@@ -1,0 +1,6 @@
+# jira2 is WIP and stays its own repo; not published in this marketplace
+jira2/
+# local Claude Code dev settings, not plugin content
+.claude/
+**/.claude/
+.DS_Store

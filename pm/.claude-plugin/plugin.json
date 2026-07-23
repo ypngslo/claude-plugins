@@ -1,0 +1,8 @@
+{
+  "name": "product-brain",
+  "description": "Gives Claude the context-awareness and judgment of a seasoned product manager. Calibrates decisions to the product's real stage and usage, evaluates proposals against purpose and priorities, and pushes back on speculative or mistimed work.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Mickey Malotte"
+  }
+}

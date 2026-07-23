@@ -1,0 +1,22 @@
+# {{PROJECT_NAME}} — Product State
+last-updated: {{DATE}}
+
+## What & Why
+{{One paragraph: what this is, who it's for, what job they hire it to do.}}
+
+## Stage
+{{prototype | early | live | mature}} — {{honest numbers: "0 users",
+"3 friends testing", "~40 weekly actives, ~5 paying"}}
+
+## Current Priorities
+1. {{priority}}
+2. {{priority — max 3 total}}
+
+## Not Now
+- {{deferred item — one-line reasoning — trigger to revisit}}
+
+## Decisions Log
+- {{YYYY-MM}}: {{chose X over Y because Z}}
+
+## Collaborators
+- {{name/handle — focus area}}

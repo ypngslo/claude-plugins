@@ -1,0 +1,47 @@
+{
+  "description": "jira3 — fire-and-forget local→Jira sync. Task-file writes and session starts spawn the detached sync CLI; the model loop never waits on Jira.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/on-task-write.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|SendMessage|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/bin/activity-log.mjs"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/bin/activity-log.mjs"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/on-session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

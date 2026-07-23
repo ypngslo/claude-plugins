@@ -1,0 +1,6 @@
+{
+  "name": "jira",
+  "description": "Jira commands, skills, and agents",
+  "version": "1.0.0",
+  "author": { "name": "MickeyJ" }
+}
