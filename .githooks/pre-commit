@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Fast local gate; CI re-runs the same scripts as the enforcement layer.
+# Skip in an emergency with: git commit --no-verify
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+scripts/check-secrets.sh staged
+scripts/check-validate.sh
+scripts/check-static.sh
