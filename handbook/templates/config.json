@@ -1,0 +1,19 @@
+{
+  "site": "your-site.atlassian.net",
+  "spaceKey": "DOCS",
+  "parentPageId": "",
+  "titlePrefix": "",
+  "labels": [],
+  "email": "you@example.com",
+  "tokenEnv": "CONFLUENCE_API_TOKEN",
+  "envFile": ".env",
+  "audience": {
+    "banned": [],
+    "allow": [],
+    "allowPattern": []
+  },
+  "staleness": {
+    "watch": [],
+    "ignore": ["**/*.test.*", "**/__snapshots__/**"]
+  }
+}
