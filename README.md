@@ -1,6 +1,7 @@
 # ypng-tools — Claude Code plugin marketplace
 
-Claude Code plugins for local-first Jira tracking and product-management judgment.
+Claude Code plugins for local-first Jira tracking, product-management judgment,
+and codebase-derived Confluence documentation.
 
 ## Install
 
@@ -12,6 +13,7 @@ Claude Code plugins for local-first Jira tracking and product-management judgmen
 | Plugin | Description |
 | --- | --- |
 | `jira3` | Local-first Jira tracking: task files in the repo are the source of truth; detached hooks mirror them to Jira with zero model cost. Done requires human approval. |
+| `handbook` | Non-technical product docs in Confluence, derived from the codebase: page files in the repo are the source of truth; a zero-dependency CLI mirrors them via detached hooks. Git-derived staleness detection; an audience gate blocks jargon, code, secrets, and unverified claims from publishing. |
 | `jira` | Jira commands, skills, and agents (predecessor of jira3). |
 | `product-brain` | Gives Claude the context-awareness and judgment of a seasoned product manager. |
 

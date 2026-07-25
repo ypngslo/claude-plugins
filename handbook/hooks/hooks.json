@@ -1,0 +1,27 @@
+{
+  "description": "handbook — fire-and-forget local→Confluence mirror. Page writes spawn the detached sync CLI; session start reports doc staleness and reconciles.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/on-page-write.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/on-session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "ypng-tools",
-  "description": "Claude Code plugins for local-first Jira tracking and product-management judgment",
+  "description": "Claude Code plugins for local-first Jira tracking, product-management judgment, and codebase-derived Confluence documentation",
   "owner": {
     "name": "MickeyJ"
   },
@@ -14,6 +14,11 @@
       "name": "jira3",
       "source": "./jira3",
       "description": "Local-first Jira tracking: task files are the source of truth; detached hooks mirror them to Jira with zero model cost. Done requires human approval."
+    },
+    {
+      "name": "handbook",
+      "source": "./handbook",
+      "description": "Non-technical product docs in Confluence, derived from the codebase: page files in the repo are the source of truth; a zero-dependency CLI mirrors them via detached hooks. Git-derived staleness detection; an audience gate blocks jargon, code, secrets, and unverified claims from publishing."
     },
     {
       "name": "product-brain",
