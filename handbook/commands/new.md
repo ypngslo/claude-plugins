@@ -7,7 +7,8 @@ Create one new page for: **$ARGUMENTS**
 Load the `handbook-docs` skill first, then:
 
 1. **Find the code first.** Locate the feature in the repo (grep for its
-   user-facing strings, routes, commands, flags). If you cannot point at the code
+   visible strings, routes, commands, flags — admin and back-office surfaces
+   count exactly like customer ones). If you cannot point at the code
    that implements it, stop and ask the user — a page with no anchor documents
    nothing, and `sources:` is not optional for `feature`/`overview`/
    `capabilities`/`reference` kinds.
@@ -19,7 +20,12 @@ Load the `handbook-docs` skill first, then:
 3. Fill the frontmatter:
    - `title` — what a PM would call the feature, not what the module is called.
      It must be unique across the suite (Confluence titles are unique per space).
-   - `parent` — the slug of the index page this belongs under (usually `features`).
+   - `parent` — the slug of the index page this belongs under, **by audience**:
+     customer-facing capabilities go under `features` (slug `feature-<name>`),
+     admin/operator/internal capabilities go under `admin` (slug `admin-<name>`,
+     created as an `index` page first if it does not exist yet). The two branches
+     never mix — a reader must be able to trust that everything under "Features"
+     is what customers get.
    - `order` — where it sorts among its siblings in that index table.
    - `sources` — the pathspecs you actually found in step 1, verified with
      `git ls-files`.
