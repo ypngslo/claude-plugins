@@ -27,7 +27,7 @@ frontmatter, never in directories: moving a page is a one-line `parent:` edit.
 | Key | Values | Who writes it |
 | --- | ------ | ------------- |
 | `title` | the page title a PM would recognize; unique across the suite | you, at creation |
-| `kind` | a key of config's `kinds` (`index`, `overview`, `feature`, `capabilities`, `glossary`, `release-notes`, `reference`) | you, at creation — the kind picks the required sections and the page's label |
+| `kind` | a key of config's `kinds` (`index`, `overview`, `feature`, `capabilities`, `glossary`, `release-notes`, `observations`, `reference`) | you, at creation — the kind picks the required sections and the page's label |
 | `parent` | slug of the parent page; empty = mounts at the configured root | you |
 | `order` | integer, default 100 — sibling sort in generated index tables | you |
 | `sources` | `[pathspecs]` — the code this page documents | you, from code you actually read |
@@ -63,6 +63,20 @@ cannot ask a follow-up question.** They are smart and they know the product
 domain. They do not know your repo's nouns, your file layout, your function
 names, or your stack. If a sentence only makes sense to someone who has read the
 code, it is not documentation — it is a leak.
+
+## Every audience is documented — and kept clearly separate
+
+"User-facing" means **every human the product faces**, not just customers: admin
+dashboards, back-office and support tooling, configuration UIs, emails and
+notifications, and scheduled jobs with observable effects are all documentable
+surfaces — the admin's screen is a feature whose user is the admin. When the
+suite covers more than one audience, the branches stay **clearly separated**:
+customer-facing pages under the `features` index (`feature-*` slugs), admin and
+internal-operations pages under the `admin` index (`admin-*` slugs). Never file
+an admin capability under `features` or a customer capability under `admin` — a
+reader must be able to trust that everything under "Features" is what customers
+get. `staleness.watch` in config should cover ALL these surfaces' code, so an
+undocumented one surfaces as a GAP instead of vanishing.
 
 ## Voice rules
 
@@ -166,6 +180,28 @@ No page publishes without a clean pass. Run this in order, per page:
 - MISSING-SOURCE means the code moved or died — repoint `sources:` or propose a
   retire. GAP means code nobody documents — propose a new page. Both are
   proposals to the human, never silent edits.
+
+## Observations — capture what you notice, never hunt for it
+
+While reading sources for doc work you will sometimes see something that looks
+wrong: behavior that seems broken, an inconsistency between two flows, a feature
+that appears dead. **Capture it; never chase it.**
+
+- The moment you notice, add one line to a running note and go straight back to
+  the doc work. **You never spend a single extra tool call investigating an
+  observation, and you never read code the doc work did not already require.**
+  An observation is something the work put in front of you — the instant you are
+  reading a file *in order to find problems*, you have left this contract.
+- At the **end** of the pass (scaffold or refresh), write the collected lines
+  into `observations.md` (kind `observations`), dated, newest first, under
+  `## Open observations` — each phrased as what a person using the product would
+  experience, naming the feature or flow, never a file. If nothing was noticed,
+  touch nothing.
+- Entries are **observations to investigate, not confirmed findings** — write
+  them with that hedge, because unverified claims must not read as facts.
+- The page follows the normal lifecycle: it stays `draft` until the human's
+  explicit word first publishes it, so whether this page belongs in Confluence
+  at all is their call.
 
 ## What you never do
 

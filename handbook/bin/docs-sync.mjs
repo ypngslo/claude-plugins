@@ -190,6 +190,12 @@ const DEFAULT_KINDS = {
     allowCodeBlocks: false,
     requiredSections: [],
   },
+  observations: {
+    label: 'observations',
+    requireSources: false,
+    allowCodeBlocks: false,
+    requiredSections: [],
+  },
   reference: { label: 'reference', requireSources: true, allowCodeBlocks: true, requiredSections: [] },
 };
 

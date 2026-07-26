@@ -22,8 +22,11 @@ Set up handbook docs in this repository:
    - `labels` — a short repo slug (e.g. `["acme"]`) when several repos share one
      space: it stamps every page and namespaces the per-page `hb-acme-<slug>`
      marker label. Leave `[]` when the space serves only this repo.
-   Leave `kinds`, `audience`, `staleness`, `render`, and `sync` at their defaults
-   for now; tune them once real pages exist.
+   Leave `kinds`, `audience`, `render`, and `sync` at their defaults for now;
+   tune them once real pages exist. `staleness.watch` gets set during
+   `/handbook:scaffold` to the repo's source roots — it is what turns an
+   undocumented surface into a mechanical GAP report, so do not leave it empty
+   once pages exist.
 3. Confirm the token: `CONFLUENCE_API_TOKEN` must be set in their environment
    (created at id.atlassian.com → API tokens). Check with
    `[ -n "$CONFLUENCE_API_TOKEN" ] && echo set`. **Never write the token to any

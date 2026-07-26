@@ -32,15 +32,22 @@ first; its gate sequence and single-write rule govern every write below.
    expand a page's `sources:` to make the report quiet.
 6. **DIRTY** is informational — uncommitted source changes. Mention it; it never
    blocks anything.
-7. **Run the gate on every page you touched**, exactly as the skill specifies:
+7. **Capture observations, never hunt them.** If the reading this loop already
+   required put something in front of you that looks wrong (broken-seeming
+   behavior, an inconsistency, an apparently dead feature), note it in one line
+   and move on — per the skill's observations rule, **zero extra tool calls, no
+   detours**. At the end of the pass, write the collected lines into
+   `observations.md` (kind `observations`), dated, as things to investigate —
+   not confirmed findings. If nothing was noticed, touch nothing.
+8. **Run the gate on every page you touched**, exactly as the skill specifies:
    lint clean → `handbook:audience-reviewer` → one `handbook:claim-checker` per
    load-bearing claim in parallel → then ONE write that carries both the
    `## Editorial` trail and the final `status:`. Two writes fire two hook syncs
    and publish a half-finished page.
-8. A page that is already `published` republishes on its content update — no
+9. A page that is already `published` republishes on its content update — no
    approval needed. A page publishing for the FIRST time needs the human's
    explicit word (`approved: true`); ask for it per page, and leave the page a
    draft until you get it.
-9. Report to the user: pages refreshed, pages judged cosmetic-only, gate findings
-   that sent a page back to draft, and anything you proposed (retire / new) that
-   needs their decision.
+10. Report to the user: pages refreshed, pages judged cosmetic-only, gate
+    findings that sent a page back to draft, observations captured, and anything
+    you proposed (retire / new) that needs their decision.

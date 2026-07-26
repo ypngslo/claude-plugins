@@ -89,6 +89,7 @@ owns names. Default bank (config `kinds` is spread OVER this, so projects extend
   "capabilities":  { "label": "capabilities",  "requireSources": true,  "allowCodeBlocks": false, "requiredSections": ["What it can do today", "What it cannot do yet"] },
   "glossary":      { "label": "glossary",      "requireSources": false, "allowCodeBlocks": false, "requiredSections": [] },
   "release-notes": { "label": "release-notes", "requireSources": false, "allowCodeBlocks": false, "requiredSections": [] },
+  "observations":  { "label": "observations",  "requireSources": false, "allowCodeBlocks": false, "requiredSections": [] },
   "reference":     { "label": "reference",     "requireSources": true,  "allowCodeBlocks": true,  "requiredSections": [] }
 }
 ```
@@ -352,7 +353,7 @@ Index table columns: Page (`ac:link` by title) | Summary (child firstParagraph, 
 | `[t](https://… \| http://… \| mailto:…)` | `<a href="…">t</a>` |
 | `[t](slug.md)` / `[t](slug.md#Some Heading)` | `<ac:link[ ac:anchor="Some Heading"]><ri:page ri:content-title="<effective title>" /><ac:plain-text-link-body><![CDATA[t]]></ac:plain-text-link-body></ac:link>`; unknown slug ⇒ RenderError |
 | `![alt](https://…)` | `<ac:image ac:alt="alt"><ri:url ri:value="…" /></ac:image>` |
-| `![alt](anything local)` | RenderError — attachments are v0.2 |
+| `![alt](anything local)` | RenderError — attachments are deferred (v0.3) |
 | `[[status:Colour\|Text]]` | status macro, `colour` ∈ `Grey\|Red\|Yellow\|Green\|Blue` (exact, capitalized — else RenderError), `title` param; wrapped in `<p>` when standalone |
 | two-trailing-space line break | `<br />` |
 | `<!-- children -->` | index-table placement marker (index kinds; elsewhere ⇒ RenderError) |
@@ -493,7 +494,7 @@ handbook/
   hooks/   hooks.json  on-page-write.sh  on-session-start.sh          (scripts 100755)
   bin/     docs-sync.mjs  render.mjs  lint.mjs  gitinfo.mjs           (docs-sync 100755)
   templates/  config.json  page.md
-              kinds/ index.md overview.md feature.md capabilities.md glossary.md release-notes.md
+              kinds/ index.md overview.md feature.md capabilities.md glossary.md release-notes.md observations.md
   test/    mock-confluence.mjs  run.sh                                 (run.sh 100755)
 ```
 
@@ -502,10 +503,15 @@ handbook/
 - **init** — run `docs-sync.mjs init`; fill config WITH the user (never guess spaceKey;
   token stays in env, never in a file; probe: on 401 explain scoped-token `apiBase`);
   verify one round trip; hand off to the skill.
-- **scaffold** — survey the repo; create the default suite from `templates/kinds/*`
-  (index, overview, features index, one feature page per user-facing capability,
-  capabilities, glossary, release-notes), `sources:` filled from the actual survey, all
-  `status: draft`, `approved: false`.
+- **scaffold** — survey the repo for every human-facing surface, **every audience**
+  (customers AND admins/operators/internal staff — admin dashboards are features
+  whose user is the admin); create the default suite from `templates/kinds/*` with
+  customer pages (`feature-*`) under a `features` index and admin/internal pages
+  (`admin-*`) under a separate `admin` index — the two branches never mix;
+  `sources:` filled from the actual survey, `staleness.watch` set to the source
+  roots so undocumented surfaces become GAP reports, a closing `stale` run with
+  every GAP either paged or explicitly excluded with a reason, incidental
+  observations recorded (v0.2.0, below), all `status: draft`, `approved: false`.
 - **new <feature>** — one page from its kind template; wire `parent:`/`order:`; propose
   `sources:` by locating the feature's code.
 - **refresh** — the main loop: `stale` → read the listed commits/diffs → judge per page
@@ -637,7 +643,28 @@ calls; `envFile` + custom `emailEnv`/`tokenEnv` under `env -u …` ⇒ succeeds 
   nothing runtime-required may be gitignored; version starts 0.1.0 (new-plugin exemption);
   gitleaks must stay green (hence runtime-assembled fixtures).
 
-## 14. Deliberately out of scope for 0.1.0
+## 14. Changes in 0.2.0
+
+- **`observations` kind + passive capture.** While reading sources for doc work,
+  the model records anything that looks wrong as one dated line and moves on —
+  the skill forbids spending any extra tool call investigating or reading code
+  the doc work didn't already require ("capture, never hunt"). At the end of a
+  scaffold/refresh pass the lines land in `observations.md` (draft by default,
+  so first publish stays the human's word). Entries are hedged as observations
+  to investigate, never stated as confirmed findings.
+- **Audience coverage + separation.** "User-facing" explicitly means every human
+  the product faces: customers AND admins/operators/internal staff (dashboards,
+  back-office tooling, emails, jobs with observable effects). Customer pages
+  (`feature-*`, under the `features` index) and admin/internal pages (`admin-*`,
+  under a separate `admin` index) are kept in clearly separated branches that
+  never mix. Scaffold arms `staleness.watch` with the source roots and must end
+  with a `stale` run where every GAP is either paged or explicitly excluded with
+  a reason — coverage is verified mechanically, not assumed. (Motivating
+  incident: a 0.1.0 scaffold on a real app skipped the admin dashboard because
+  the prose said "user-facing … not internal plumbing" and `watch` shipped
+  empty, so GAP detection was disarmed.)
+
+## 15. Deliberately out of scope
 
 Attachments/local images (v1 multipart + `X-Atlassian-Token: nocheck`; designed, deferred
 to 0.2) · Confluence folders (no list/update endpoints) · sibling ordering in the

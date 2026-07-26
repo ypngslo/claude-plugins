@@ -72,7 +72,7 @@ handbook itself wrote — hand-added labels survive forever. `titlePrefix` is th
 escape hatch for Confluence's space-wide title uniqueness.
 
 Pages are typed by **kind** (`index`, `overview`, `feature`, `capabilities`,
-`glossary`, `release-notes`, `reference`). The tool knows only structural
+`glossary`, `release-notes`, `observations`, `reference`). The tool knows only structural
 properties — required sections, whether sources are mandatory, whether code
 blocks are allowed — and the project owns the vocabulary: `kinds` in config is
 spread over the defaults, so a repo can add or override kinds freely.
@@ -128,7 +128,12 @@ on a source-file write** — staleness is derived on demand, not maintained.
 ## Commands / CLI
 
 - `/handbook:init` — scaffold + guided config in the current repo.
-- `/handbook:scaffold` — survey the repo and create the initial page suite as drafts.
+- `/handbook:scaffold` — survey the repo and create the initial page suite as
+  drafts, covering **every audience**: customer-facing pages under a `features`
+  branch, admin/internal-operations pages under a clearly separated `admin`
+  branch. Ends by verifying coverage (`stale`'s GAP report) so nothing human-facing
+  is skipped silently, and records anything odd it noticed in passing on an
+  `observations` page — captured incidentally, never hunted for.
 - `/handbook:new <feature>` — one new page from its kind template, sources located
   in the code.
 - `/handbook:refresh` — the main loop: stale → read the commits → update → gate →
@@ -153,7 +158,7 @@ tables, callout panels, expands, status lozenges, cross-page links, code macros
 where the kind allows them). The renderer **fails closed**: anything outside the
 subset raises an error naming the source line, never a silent drop.
 
-**Deferred to 0.2:** attachments and local images. `![alt](https://…)` renders
+**Deferred to 0.3:** attachments and local images. `![alt](https://…)` renders
 today; a local image path is a deliberate render error rather than a broken page,
 because the v1 multipart attachment upload is designed but not shipped.
 
