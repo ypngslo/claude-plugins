@@ -21,11 +21,11 @@ Explain in one or two sentences the outcome this feature delivers for the person
 
 ## How it behaves
 
-Walk through what a reader should expect to happen, step by step, in plain everyday language.
+Number the steps of the main path, one short line each, and tuck what happens when a step goes wrong under that step as a sub-bullet.
 
 ## Limits & known gaps
 
-State plainly what this feature does not yet do, so nobody assumes more than is true.
+List one limit per line, plain fact first, so nobody assumes more than is true.
 
 ## Editorial
 

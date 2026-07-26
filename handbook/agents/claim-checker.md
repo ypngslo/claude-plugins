@@ -38,9 +38,24 @@ the code.
 
 ```
 VERDICT: SUPPORTED | UNSUPPORTED
-EVIDENCE: <path/to/file.ext:NN — one sentence restating the mechanism from the
-code (SUPPORTED), or what you looked at and what is actually true instead
-(UNSUPPORTED)>
+EVIDENCE: <path>:<line> — <one-sentence mechanism>
 ```
+
+`EVIDENCE:` is three exact fields, because the gate copies them verbatim into the
+page's published citation for this claim (`[^N]: <path>:<line> @ <sha> —
+<mechanism>`); it adds the sha itself. Get the fields wrong and the citation is
+wrong:
+
+- **`<path>`** — repo-relative, exactly one file, no spaces, no leading `./`,
+  never absolute. Name the file that *decides* the behavior, not one that merely
+  calls it.
+- **`<line>`** — one 1-based line number, not a range: the decisive line.
+- **`<mechanism>`** — ONE plain-text sentence, separated from the path by a
+  spaced em dash (` — `), saying what happens that makes the claim true. No
+  markdown, no quoted code, no second sentence, no restating the claim back.
+
+UNSUPPORTED uses the same three fields: cite the path and line you actually
+checked, and let the sentence say what is true instead, or which condition the
+claim leaves out.
 
 Raw data only — no preamble.

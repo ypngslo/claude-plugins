@@ -13,6 +13,9 @@
  *   - errors block publish; warns never do.
  *   - `## Editorial` / `## Rework` are local-only sections: no rule looks at
  *     them EXCEPT the secret scan, which covers the whole file.
+ *   - `## Claims` publishes, but it is the one deliberately-technical block
+ *     (collapsed and labelled by the renderer): the shape rules and the jargon
+ *     bank skip it, while the secret scan still covers it.
  *   - identifier / path / command / protocol shapes never fire inside fenced
  *     code blocks (the command rule deliberately still reads inline code
  *     spans — a backticked `git push` is exactly what it is hunting).
@@ -34,6 +37,11 @@ export const DEFAULT_BANNED = [
 const CODE_EXT = 'tsx?|jsx?|mjs|py|go|rb|rs|java|kt|sql|ya?ml|json|sh|css|html';
 const COMMANDS = 'git|npm|pnpm|yarn|docker|kubectl|psql|curl';
 const HTTP_VERBS = 'GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS';
+
+// Claim citations (§15.2): `[^N]` marks the sentence, `[^N]: …` defines it in
+// the published `## Claims` section.
+const CLAIM_MARKER = /\[\^(\d{1,2})\]/g;
+const CLAIM_DEFINITION = /^\s{0,3}\[\^(\d{1,2})\]:/;
 
 // Every pattern here is a shape, never a value: nothing matched is ever echoed.
 const SECRET_PATTERNS = [
@@ -130,6 +138,22 @@ function geometry(page) {
   return { lines, frontEnd, bodyStart, localStart };
 }
 
+/** The `## Claims` span inside the publish body (heading line included), or null. */
+function claimsRange(lines, bodyStart, localStart, inFence) {
+  for (let i = bodyStart; i < localStart; i++) {
+    if (inFence.has(i) || !/^##\s+Claims\s*$/.test(lines[i])) continue;
+    let end = localStart;
+    for (let j = i + 1; j < localStart; j++) {
+      if (!inFence.has(j) && /^##\s/.test(lines[j])) {
+        end = j;
+        break;
+      }
+    }
+    return { start: i, end };
+  }
+  return null;
+}
+
 function scanFences(lines, from, to) {
   const inFence = new Set();
   const opens = [];
@@ -182,6 +206,9 @@ const maskExternalLinks = (text) =>
   text
     .replace(/\]\(\s*(?:https?:|mailto:|#)[^)]*\)/gi, blank)
     .replace(/\b(?:https?|mailto):\S+/gi, blank);
+
+// A `[^N]` citation marker is bookkeeping, not prose — it never feeds a shape rule.
+const maskClaimMarkers = (text) => text.replace(/\[\^\d{1,2}\]/g, blank);
 
 // ---------------------------------------------------------------------------
 // text helpers
@@ -286,6 +313,7 @@ export function lintPage(page, suite, config) {
   const slug = page?.slug ?? '';
   const { lines, frontEnd, bodyStart, localStart } = geometry(page);
   const { inFence, opens } = scanFences(lines, bodyStart, localStart);
+  const claims = claimsRange(lines, bodyStart, localStart, inFence);
   const at = (index) => index + 1;
   const frontLine = (key) => {
     if (frontEnd === -1) return null;
@@ -295,8 +323,10 @@ export function lintPage(page, suite, config) {
 
   secretScan(lines, cfg, page, error);
   structureRules({ page, fields, slug, kind, cfg, pages, lines, bodyStart, localStart, inFence, opens, frontLine, at, error, warn });
-  contentRules({ cfg, lines, bodyStart, localStart, inFence, at, error });
+  contentRules({ cfg, lines, bodyStart, localStart, inFence, claims, at, error });
+  claimRules({ lines, bodyStart, localStart, inFence, claims, at, error, warn });
   readabilityRules({ page, cfg, lines, bodyStart, localStart, inFence, at, warn });
+  wallOfText({ lines, bodyStart, localStart, inFence, claims, at, warn });
 
   return { errors, warns };
 }
@@ -476,7 +506,7 @@ function parentCycle(slug, parent, pages) {
 
 // -- shapes: identifiers, paths, commands, protocol, jargon -----------------
 function contentRules(x) {
-  const { cfg, lines, bodyStart, localStart, inFence, at, error } = x;
+  const { cfg, lines, bodyStart, localStart, inFence, claims, at, error } = x;
   const bannedPatterns = cfg.banned.map((term) => [
     term,
     new RegExp(`\\b${escapeRe(term).replace(/\s+/g, '\\s+')}\\b`, 'i'),
@@ -484,12 +514,14 @@ function contentRules(x) {
 
   for (let i = bodyStart; i < localStart; i++) {
     if (inFence.has(i)) continue;
+    // `## Claims` is technical on purpose: paths, lines and shas are its content.
+    if (claims && i >= claims.start && i < claims.end) continue;
     // The index-table placement marker is the one HTML comment the renderer
     // accepts; its "<!--"/"-->" must not read as code syntax.
     if (/^\s*<!-- children -->\s*$/.test(lines[i])) continue;
     const line = lines[i];
     const { masked, spans } = maskCodeSpans(line);
-    const probe = maskExternalLinks(masked);
+    const probe = maskClaimMarkers(maskExternalLinks(masked));
     const lineNo = at(i);
 
     identifierShapes(probe, lineNo, cfg, error);
@@ -576,6 +608,56 @@ function protocolShapes(probe, lineNo, cfg, error) {
   }
 }
 
+// -- claim citations: markers in the body vs definitions in `## Claims` ------
+function claimRules(x) {
+  const { lines, bodyStart, localStart, inFence, claims, at, error, warn } = x;
+
+  const cited = new Map();
+  for (let i = bodyStart; i < localStart; i++) {
+    if (inFence.has(i)) continue;
+    if (claims && i >= claims.start && i < claims.end) continue;
+    // Code spans are masked: a backticked `[^1]` is shown, not cited.
+    for (const match of maskCodeSpans(lines[i]).masked.matchAll(CLAIM_MARKER)) {
+      if (!cited.has(match[1])) cited.set(match[1], i);
+    }
+  }
+
+  const defined = new Map();
+  if (claims) {
+    for (let i = claims.start + 1; i < claims.end; i++) {
+      if (inFence.has(i)) continue;
+      const match = lines[i].match(CLAIM_DEFINITION);
+      if (!match) continue;
+      if (defined.has(match[1])) {
+        error(
+          'claim-duplicate',
+          at(i),
+          `claim [^${match[1]}] is defined twice in "## Claims" — one definition per number`
+        );
+        continue;
+      }
+      defined.set(match[1], i);
+    }
+  }
+
+  for (const [n, index] of cited) {
+    if (defined.has(n)) continue;
+    error(
+      'claim-undefined',
+      at(index),
+      `claim [^${n}] is cited here but never defined — add "[^${n}]: <path>[:<line>] — <how the code does it>" to the "## Claims" section`
+    );
+  }
+  for (const [n, index] of defined) {
+    if (cited.has(n)) continue;
+    warn(
+      'claim-unused',
+      at(index),
+      `claim [^${n}] is defined but never cited — mark the sentence it backs with [^${n}], or drop the definition`
+    );
+  }
+}
+
 // -- readability / shape warnings -------------------------------------------
 function readabilityRules(x) {
   const { page, cfg, lines, bodyStart, localStart, inFence, at, warn } = x;
@@ -616,6 +698,86 @@ function readabilityRules(x) {
         'summary-paragraph',
         firstLine,
         `the opening paragraph is ${openerWords} words — aim for 20–60; it becomes this page's summary in its parent index`
+      );
+    }
+  }
+}
+
+// A block is prose unless it opens as a list, callout, heading or HTML, or
+// carries a table row — those are exactly the shapes a wall of text lacks.
+const TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|.*)?$/;
+
+function isProseBlock(block) {
+  const [first] = block.lines;
+  if (/^\s{0,3}(?:[-*+]|\d+[.)])\s/.test(first)) return false;
+  if (/^\s{0,3}>/.test(first)) return false;
+  if (/^\s{0,3}#{1,6}\s/.test(first)) return false;
+  if (/^\s{0,3}</.test(first)) return false;
+  return !block.lines.some((line) => line.trimStart().startsWith('|') || TABLE_RULE.test(line));
+}
+
+/**
+ * §15.1: a `##` section of the publish body holding ≥3 consecutive paragraph
+ * blocks reads as a wall. Warn only — thoroughness stays, it just has to land
+ * as steps, bullets or a table. `## Claims` is a citation list, not prose.
+ */
+function wallOfText(x) {
+  const { lines, bodyStart, localStart, inFence, claims, at, warn } = x;
+
+  const headings = [];
+  for (let i = bodyStart; i < localStart; i++) {
+    if (inFence.has(i)) continue;
+    const match = lines[i].match(/^##\s+(.+?)\s*$/);
+    if (match) headings.push({ index: i, text: match[1].trim() });
+  }
+
+  for (let h = 0; h < headings.length; h++) {
+    const heading = headings[h];
+    if (claims && heading.index === claims.start) continue;
+    const end = h + 1 < headings.length ? headings[h + 1].index : localStart;
+
+    let block = null;
+    let run = 0;
+    let runStart = null;
+    let longest = 0;
+    let longestLine = null;
+    const closeBlock = () => {
+      if (!block) return;
+      if (isProseBlock(block)) {
+        run += 1;
+        if (run === 1) runStart = block.start;
+        if (run > longest) {
+          longest = run;
+          longestLine = runStart;
+        }
+      } else {
+        run = 0;
+        runStart = null;
+      }
+      block = null;
+    };
+
+    for (let i = heading.index + 1; i < end; i++) {
+      if (inFence.has(i)) {
+        closeBlock(); // a code block is itself something between the paragraphs
+        run = 0;
+        runStart = null;
+        continue;
+      }
+      if (!lines[i].trim()) {
+        closeBlock();
+        continue;
+      }
+      if (block) block.lines.push(lines[i]);
+      else block = { start: i, lines: [lines[i]] };
+    }
+    closeBlock();
+
+    if (longest >= 3) {
+      warn(
+        'wall-of-text',
+        at(longestLine),
+        `section "${heading.text}" is ${longest} consecutive paragraphs — restructure as steps, bullets, or a table`
       );
     }
   }

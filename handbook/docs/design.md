@@ -664,7 +664,86 @@ calls; `envFile` + custom `emailEnv`/`tokenEnv` under `env -u …` ⇒ succeeds 
   the prose said "user-facing … not internal plumbing" and `watch` shipped
   empty, so GAP detection was disarmed.)
 
-## 15. Deliberately out of scope
+## 15. Changes in 0.3.0 — point-form structure + claim citations
+
+**Motivation:** 0.2.0's exhaustive survey made "How it behaves" / "Limits & known gaps"
+~5× longer, as paragraph walls. Thoroughness stays; it must land as scannable points.
+Separately: the gate's claim-checkers already produce `file:line + mechanism` evidence
+per claim and discard it — 0.3.0 captures it as published, sha-pinned GitHub citations.
+
+### 15.1 Point-form section shapes (skill/skeleton/templates + one lint warn)
+
+- **How it behaves** → a numbered list: main flow one line per step; unhappy paths as
+  sub-bullets under the step where they occur; a table when behavior is conditional.
+  Prose paragraphs only for what a list genuinely cannot say.
+- **Limits & known gaps** → a bulleted list, one limit per line, crisp fact first
+  ("Exports cap at 500 rows — larger requests are split"). Optionally ONE
+  `> [!WARNING]` callout for the limit most likely to burn someone.
+- New WARN lint rule `wall-of-text`: within the publish body, any `##` section
+  containing ≥3 consecutive paragraph blocks (no list/table/callout/heading between
+  them) warns: `section "<name>" is N consecutive paragraphs — restructure as steps,
+  bullets, or a table`. Warn only, never blocks.
+
+### 15.2 Claim citations
+
+**File syntax.**
+- Inline marker `[^N]` (N = 1–99) directly after the claim sentence it anchors.
+- Definitions in a `## Claims` section — **published, but rendered specially** (below).
+  File order: body … `## Claims` … `## Editorial` … `## Rework` (Claims must precede
+  the local-only sections; everything after the first Editorial/Rework stays local).
+- Definition line grammar (one per line; blank lines allowed; anything else in the
+  section is a RenderError; an empty Claims section is a RenderError):
+  `[^N]: <path>[:<line>][ @ <sha>] — <mechanism sentence>`
+  where `<path>` is repo-relative with no spaces, `<line>` is an integer, `<sha>` is
+  7–40 hex chars, separator is ` — ` (em dash), mechanism is plain text (no inline
+  markdown; escaped verbatim). Duplicate N across definitions = lint ERROR.
+
+**Rendering** (render.mjs):
+- `[^N]` inline → `<sup>N</sup>` (plain, no link). Only in regular inline text — inside
+  CDATA link bodies it stays literal.
+- The `## Claims` section is extracted from normal flow (its heading never renders,
+  never counts for TOC auto-detection) and re-emitted after the whole body as an
+  `expand` macro, title **`Where these claims come from (technical)`**, containing an
+  `<ol>` whose `<li>`s are, per definition:
+  - `config.repoUrl` valid (`https?://…`, normalized by stripping trailing `/` and
+    `.git`): `<a href="{repoUrl}/blob/{sha or HEAD}/{path}[#L{line}]">{path}[:{line}]</a> — {mechanism}`
+  - otherwise: plain escaped text `{path}[:{line}] — {mechanism}`.
+- The Claims section participates in the content hash (it publishes). It only changes
+  when the gate rewrites it, which only happens on passes that touched content.
+
+**Lint** (lint.mjs):
+- Inside `## Claims`: identifier/path/command/protocol/jargon rules are all skipped
+  (it is the one deliberately-technical block, collapsed and labeled); the **secret
+  scan still applies**.
+- Cross-checks over publishBody + Claims: marker with no definition = ERROR
+  `claim-undefined`; definition with no marker = WARN `claim-unused`; duplicate
+  definition N = ERROR `claim-duplicate`.
+
+**Gate flow** (SKILL.md step 3–4):
+- When extracting load-bearing claims, mark each in the text with `[^N]` in order of
+  appearance. Number only decision-bearing claims (capabilities, limits, numbers,
+  failure behavior) — typically 3–10 per page, never every sentence.
+- Claim-checker evidence must come back as repo-relative path + line + one-sentence
+  mechanism; the clean-pass **single write** now carries: the rebuilt `## Claims`
+  section (`[^N]: path:line @ <short sha> — mechanism`, sha = repo HEAD at
+  verification), the `## Editorial` trail, and `status: published` — still ONE write.
+- Sha-pinned links are the point: a permalink shows the code exactly as verified, so
+  line references never rot. Definitions written by the gate always carry `@ <sha>`.
+
+### 15.3 Bookkeeping
+
+`observations` vs limits distinction stated in SKILL.md (limits = gate-verified facts
+on the feature page; observations = hedged, unverified, dated inbox entries until a
+human investigation fixes, promotes to a limit, or resolves them). Version 0.3.0.
+Attachments/local images slide to 0.4.
+
+New command `/handbook:restyle` — the one-time migration pass: restructure every
+existing page (published and draft) to the point-form shapes and re-gate it, which
+adds the claim citations. Distinct from `/handbook:refresh`, which only works the
+staleness report and remains the routine loop. Facts unchanged by contract; edits go
+page-by-page so hook syncs stay far below the update circuit breaker.
+
+## 16. Deliberately out of scope
 
 Attachments/local images (v1 multipart + `X-Atlassian-Token: nocheck`; designed, deferred
 to 0.2) · Confluence folders (no list/update endpoints) · sibling ordering in the
