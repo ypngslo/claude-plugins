@@ -46,10 +46,20 @@ Body rules:
 - The first block is a single **20–60 word paragraph**. It becomes this page's
   summary cell in its parent's index table, so write it as a standalone answer to
   "what is this page?".
+- Load-bearing claims carry an inline **`[^N]`** marker (N is 1–99) directly after
+  the sentence they anchor, and one matching definition line in a `## Claims`
+  section: `[^N]: path/to/file.ext:88 @ 9f3ac21 — one sentence on the mechanism`.
+  `## Claims` **is published** — it renders after the body as a collapsed panel
+  titled "Where these claims come from (technical)", the one deliberately
+  technical block on the page (the audience rules are skipped inside it; the
+  secret scan is not). File order is body … `## Claims` … `## Editorial` …
+  `## Rework`. A marker with no definition is a lint error, a repeated number is a
+  lint error, and a definition nothing points at is a warning. **The gate writes
+  this section** (steps 3–4 below); you never hand-maintain it.
 - `## Editorial` and `## Rework` are **local-only**: everything above the first of
   them is the published body. Neither ever reaches Confluence in any form, and
   neither affects the content hash — so editing them alone never republishes a
-  page. Convention: they come last, Editorial before Rework.
+  page. Convention: they come last, Editorial before Rework, both after `## Claims`.
 - Cross-links are `[text](other-slug.md)` (with an optional `#Heading` suffix) and
   resolve to Confluence page links. A link to a slug with no page file is a lint
   error; a link to a page that is not `published` is a warning.
@@ -103,6 +113,20 @@ feature-page skeleton** — read it before writing or rewriting a feature page. 
 sections (`## What it does`, `## How it behaves`, `## Limits & known gaps`) are
 required by the `feature` kind and the page cannot publish without them.
 
+Those sections have a **shape**, not just a name:
+
+- `## How it behaves` is a **numbered list**: one line per step of the main flow,
+  in the order the person experiences it, with the unhappy paths as sub-bullets
+  under the step where they happen. A small table when the behavior is
+  conditional. Prose paragraphs only for what a list genuinely cannot say.
+- `## Limits & known gaps` is a **bulleted list**: one limit per line, crisp fact
+  first ("Exports are capped at 500 rows — bigger requests are split"). Optionally
+  ONE `> [!WARNING]` callout, for the limit most likely to burn someone.
+
+Being thorough is not the same as writing paragraphs. A surveyed feature produces
+*more points*, not longer prose — a section that runs three paragraphs in a row
+earns a `wall-of-text` lint warning, and the fix is steps, bullets, or a table.
+
 ## Lifecycle — when to flip status
 
 - **`draft`** — the page exists and is being written. Zero network: drafts never
@@ -132,18 +156,33 @@ No page publishes without a clean pass. Run this in order, per page:
    fit, and missing limitations the code plainly implies. Discard any finding
    without a `file:line` anchor and a concrete consequence — malformed, don't act
    on it.
-3. **Verify the load-bearing claims.** Extract every sentence a PM would make a
-   decision on (a capability, a limit, a number, a behavior under failure).
-   Dispatch one **`handbook:claim-checker`** per claim, **in parallel**, with the
-   claim verbatim and the page's `sources:`. **The default verdict is
+3. **Verify the load-bearing claims — and number them.** Extract every sentence a
+   PM would make a decision on (a capability, a limit, a number, a behavior under
+   failure) and mark each one in the body with `[^N]`, numbered in order of
+   appearance. **Number only decision-bearing claims** — typically **3–10 per
+   page**, never every sentence; a marker on "the list is sorted alphabetically"
+   is noise. Dispatch one **`handbook:claim-checker`** per claim, **in parallel**,
+   with the claim verbatim and the page's `sources:`. **The default verdict is
    UNSUPPORTED**: a claim survives only if the checker cites specific code and
-   restates the mechanism. Drop or rewrite every UNSUPPORTED claim — rewriting to
-   what the code actually does is usually the right move, deleting is always
-   allowed.
+   restates the mechanism. Its `EVIDENCE:` line comes back as three fields —
+   repo-relative path, line number, one-sentence mechanism — and you **keep** them:
+   they become that claim's published citation. Drop or rewrite every UNSUPPORTED
+   claim, taking its marker with it — rewriting to what the code actually does is
+   usually the right move, deleting is always allowed. Renumber so the surviving
+   markers run 1..N in order of appearance.
 4. **One write, either way.**
    - **Clean** (reviewer clean, all claims supported): **ONE** Edit/Write that
-     carries both the `## Editorial` trail line and `status: published`:
-     `Audience-check: clean — N claims verified, reviewer clean`.
+     carries all three of — the rebuilt `## Claims` section, the `## Editorial`
+     trail line (`Audience-check: clean — N claims verified, reviewer clean`), and
+     `status: published`.
+     Rebuild `## Claims` from the surviving checkers' evidence, one line per
+     surviving marker, in order:
+     `[^1]: src/invites/service.ts:88 @ 9f3ac21 — an invite is created with a 14-day expiry and refused after it`
+     The sha is the repo's HEAD short sha at verification time
+     (`git rev-parse --short HEAD`), and **every definition the gate writes carries
+     one**: a pinned link shows the code exactly as it was verified, so the line
+     numbers never rot. Rebuild the whole section from this pass's evidence rather
+     than patching last pass's lines.
    - **Findings**: **ONE** Edit/Write that fills `## Rework` with the confirmed
      findings verbatim (file:line, the defect, the consequence) AND sets
      `status: draft`.
@@ -203,6 +242,16 @@ that appears dead. **Capture it; never chase it.**
   explicit word first publishes it, so whether this page belongs in Confluence
   at all is their call.
 
+**A limit is not an observation.** A line in `## Limits & known gaps` is a
+gate-verified fact: you read the code, a claim-checker confirmed it, and it
+publishes with its citation. An observation is the opposite — unverified, hedged,
+dated, and parked in an inbox until a human looks. Never let one drift into the
+other: something you merely suspect goes on the observations page, never into a
+feature page's limits, and an observation becomes a limit only after a human
+investigation establishes it and a normal gate pass verifies it (the alternatives
+being that the thing gets fixed, or is resolved as a non-issue and the line is
+removed).
+
 ## What you never do
 
 - **Never call Confluence** — no REST, no MCP, no curl. The CLI owns all
@@ -227,6 +276,8 @@ that appears dead. **Capture it; never chase it.**
 - `/handbook:publish` — force a foreground sync and report every action and
   refusal.
 - `/handbook:new <feature>` · `/handbook:retire <slug>` — add or retire one page.
+- `/handbook:restyle` — one-time whole-suite pass to the current section shapes +
+  claim citations; facts unchanged, routine work stays with `/handbook:refresh`.
 - `node <plugin>/bin/docs-sync.mjs pull --repo .` — read-only drift report
   (someone edited a page in Confluence). Local files stay authoritative;
   reconcile by editing them.

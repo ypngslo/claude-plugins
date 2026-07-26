@@ -113,6 +113,20 @@ and a never-waivable secret scan that includes every key name found in the repo'
 form, and they don't participate in the content hash, so editing them never
 republishes a page.
 
+### Claim citations
+
+Verified claims keep their evidence instead of discarding it. A decision-bearing
+sentence carries an inline `[^1]` marker, and the gate writes the matching
+definition — `[^1]: src/invites/service.ts:88 @ 9f3ac21 — one sentence on the
+mechanism` — into the page's `## Claims` section straight from the
+claim-checkers' output, pinned to the commit the claim was verified against. That
+section publishes, but never in place: it renders after the body as a collapsed
+panel, *Where these claims come from (technical)*, whose entries link to the exact
+file and line at that commit when `repoUrl` is configured. A PM reads clean prose;
+an engineer can check every load-bearing sentence against code that cannot rot out
+from under the line number. It is the one block where the audience rules are
+relaxed — the secret scan is not.
+
 ### Staleness
 
 `stale` is pure git, no network. For each page, the baseline is the page file's
@@ -138,6 +152,9 @@ on a source-file write** — staleness is derived on demand, not maintained.
   in the code.
 - `/handbook:refresh` — the main loop: stale → read the commits → update → gate →
   publish.
+- `/handbook:restyle` — one-time migration pass: restructure every existing page to
+  the current point-form shapes and re-gate it, which adds the claim citations.
+  Facts unchanged by contract; expect one notification wave as the suite republishes.
 - `/handbook:status` — one health table (fresh / stale / gaps / gate-blocked /
   drifted / orphaned / unpublished).
 - `/handbook:publish` — force a foreground sync and report every action and refusal.
@@ -158,7 +175,7 @@ tables, callout panels, expands, status lozenges, cross-page links, code macros
 where the kind allows them). The renderer **fails closed**: anything outside the
 subset raises an error naming the source line, never a silent drop.
 
-**Deferred to 0.3:** attachments and local images. `![alt](https://…)` renders
+**Deferred to 0.4:** attachments and local images. `![alt](https://…)` renders
 today; a local image path is a deliberate render error rather than a broken page,
 because the v1 multipart attachment upload is designed but not shipped.
 

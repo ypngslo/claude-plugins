@@ -185,11 +185,56 @@ title, summary paragraph, kind). Without the marker, the table is appended at th
 end. On any other kind, the marker is an error. Only published, non-retired
 children appear, sorted by `order` then slug.
 
+## Claim citations
+
+```markdown
+Exports are capped at 500 rows per file.[^1]
+
+## Claims
+
+[^1]: src/export/limits.ts:22 @ 9f3ac21 — the exporter splits a request into 500-row files
+```
+
+`[^N]` (N is 1–99) goes directly after the sentence it backs and renders as a
+small superscript number — plain, with no link and nothing to click. It only
+works in ordinary text; inside a link's own text it stays literal.
+
+Every marker needs one definition line in the page's `## Claims` section:
+
+```
+[^N]: <path>[:<line>][ @ <sha>] — <one sentence on the mechanism>
+```
+
+- `<path>` is repo-relative and contains no spaces; `<line>` is a whole number;
+  `<sha>` is 7 to 40 hex characters; the separator before the mechanism is a real
+  em dash with a space on each side (` — `).
+- The mechanism is plain text: no bold, no links, no inline code.
+- Blank lines between definitions are fine. **Anything else in the section is a
+  render error**, and so is an empty `## Claims` section — delete the heading
+  instead.
+- Two definitions with the same number is a lint error, a marker with no
+  definition is a lint error, and a definition nothing points at is a warning.
+
+`## Claims` **is published**, but never in place: the heading itself never
+renders, it is ignored when deciding whether the page gets a table of contents,
+and the whole section is re-emitted after the body as a collapsed expand panel
+titled **"Where these claims come from (technical)"** holding a numbered list. If
+`repoUrl` is set in config, each entry links to that exact file and line at that
+exact commit, so the reference still points at the code as it was verified;
+without `repoUrl` the entry is plain text. It is the one block on a page where
+paths are allowed — the audience rules are skipped inside it, though the secret
+scan is not.
+
+Order matters: `## Claims` comes after the body and before `## Editorial` and
+`## Rework`, which stay local-only.
+
 ## Not supported — every one of these is a render error
 
 - **Raw HTML tags** of any kind (`<div>`, `<br>`, `<b>`, …). Use the constructs
   above; there is no escape hatch into storage XML.
-- **Footnotes** (`[^1]`).
+- **General footnotes.** `[^N]` is a claim citation and nothing else: numbers
+  only (no `[^label]`), and the definition must live in `## Claims`. A definition
+  anywhere else, or any other line in that section, is an error.
 - **Reference-style links** (`[text][ref]` with a `[ref]:` definition).
 - **Autolinks** (`<https://example.com>`) — write `[text](https://example.com)`.
 - **Setext headings** (a line underlined with `===` or `---`).

@@ -21,7 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** Bump when the emitted storage changes for identical markdown (state logs it). */
-export const RENDER_VERSION = 1;
+export const RENDER_VERSION = 2;
 
 /** Fallback for config.render.codeLanguages so the renderer stands alone. */
 export const DEFAULT_CODE_LANGUAGES = [
@@ -55,6 +55,24 @@ const TOC_MACRO =
   '<ac:parameter ac:name="maxLevel">3</ac:parameter>' +
   '<ac:parameter ac:name="printable">true</ac:parameter>' +
   '</ac:structured-macro>';
+
+// Claim citations (§15.2). `[^N]` marks a claim inline; the definitions live in
+// a "## Claims" section that never renders in flow — it comes back as a single
+// collapsed expand macro after the body.
+const CLAIMS_HEADING = /^##\s+Claims\s*$/;
+const CLAIMS_TITLE = 'Where these claims come from (technical)';
+
+/** Inline marker `[^N]`, N = 1–99 (no leading zeros). */
+const CLAIM_MARKER = /^\[\^([1-9]\d?)\]/;
+
+/**
+ * The one line shape a "## Claims" section may contain:
+ *   `[^N]: <path>[:<line>][ @ <sha>] — <mechanism sentence>`
+ * path has no spaces, line is an integer, sha is 7–40 hex, the separator is a
+ * spaced em dash and the mechanism is plain text (escaped verbatim).
+ */
+const CLAIM_DEFINITION =
+  /^\[\^([1-9]\d?)\]:[ \t]+(\S+?)(?::(\d+))?(?:[ \t]+@[ \t]+([0-9a-fA-F]{7,40}))?[ \t]+—[ \t]+(\S.*)$/;
 
 export class RenderError extends Error {
   constructor(line, construct, detail) {
@@ -723,7 +741,16 @@ function renderInline(text, n, rc) {
         continue;
       }
       if (text[i + 1] === '^') {
-        fail(n, 'footnote', 'footnotes are not supported');
+        // A claim marker renders as a bare superscript; every other
+        // footnote-shaped construct is still refused.
+        const marker = text.slice(i).match(CLAIM_MARKER);
+        if (marker) {
+          flush();
+          out += `<sup>${marker[1]}</sup>`;
+          i += marker[0].length;
+          continue;
+        }
+        fail(n, 'footnote', 'footnotes are not supported — a claim marker is "[^N]" with N between 1 and 99');
       }
       const link = readLink(text, i, n);
       if (link) {
@@ -895,6 +922,85 @@ function childTable(children) {
 }
 
 /**
+ * Pull the "## Claims" section out of the line stream before the block parser
+ * sees it: its heading never renders and never counts toward TOC
+ * auto-detection, and its definition lines are not markdown blocks. The section
+ * runs from its heading to the next top-level `#`/`##` heading (in practice the
+ * end of the publish body — Editorial/Rework are already stripped upstream).
+ */
+function extractClaims(lines) {
+  const bodyLines = [];
+  const claimLines = [];
+  let headingLine = null;
+  let inFence = false;
+  let inClaims = false;
+  for (const line of lines) {
+    const indent = leadingSpaces(line.text);
+    const bare = rtrim(line.text.slice(indent));
+    if (indent < 4 && bare.startsWith('```')) inFence = !inFence;
+    const isTopHeading = !inFence && indent === 0 && /^#{1,2}\s/.test(bare);
+    if (isTopHeading && CLAIMS_HEADING.test(bare)) {
+      if (headingLine !== null) {
+        fail(line.n, 'claims', 'only one "## Claims" section per page');
+      }
+      headingLine = line.n;
+      inClaims = true;
+      continue;
+    }
+    if (inClaims && isTopHeading) inClaims = false;
+    (inClaims ? claimLines : bodyLines).push(line);
+  }
+  return { bodyLines, claimLines, headingLine };
+}
+
+/** Claim section lines → definitions, in file order. Fails on anything else. */
+function parseClaims(claimLines, headingLine) {
+  const defs = [];
+  for (const line of claimLines) {
+    if (!line.text.trim()) continue;
+    const m = rtrim(line.text).match(CLAIM_DEFINITION);
+    if (!m) {
+      fail(
+        line.n,
+        'claim-definition',
+        'not a claim definition — the "## Claims" section holds only "[^N]: path[:line][ @ sha] — mechanism" lines (N 1–99, " — " is an em dash)'
+      );
+    }
+    defs.push({ path: m[2], line: m[3] ?? null, sha: m[4] ?? null, mechanism: m[5].trim() });
+  }
+  if (!defs.length) {
+    fail(headingLine, 'claims', 'the "## Claims" section is empty — add "[^N]: …" definitions or drop the section');
+  }
+  return defs;
+}
+
+/** `https://host/o/r.git/` → `https://host/o/r`; anything else → null. */
+function normalizeRepoUrl(value) {
+  const url = typeof value === 'string' ? value.trim() : '';
+  if (!/^https?:\/\/\S+$/i.test(url)) return null;
+  const clean = url.replace(/\/+$/, '').replace(/\.git$/i, '').replace(/\/+$/, '');
+  return /^https?:\/\/.+/i.test(clean) ? clean : null;
+}
+
+/**
+ * The claims block: one collapsed expand after the body, an <ol> in definition
+ * order. With a usable repoUrl each item links to the sha-pinned (or HEAD)
+ * blob line; without one it degrades to plain escaped text. Mechanism text is
+ * escaped verbatim — it is never parsed as markdown.
+ */
+function claimsMacro(defs, config) {
+  const repoUrl = normalizeRepoUrl(config.repoUrl);
+  const items = defs.map((def) => {
+    const label = def.line ? `${def.path}:${def.line}` : def.path;
+    const mechanism = escapeXml(def.mechanism);
+    if (!repoUrl) return `<li>${escapeXml(label)} — ${mechanism}</li>`;
+    const href = `${repoUrl}/blob/${def.sha ?? 'HEAD'}/${def.path}${def.line ? `#L${def.line}` : ''}`;
+    return `<li><a href="${attrEsc(href)}">${escapeXml(label)}</a> — ${mechanism}</li>`;
+  });
+  return richMacro('expand', [param('title', CLAIMS_TITLE)], `<ol>\n${items.join('\n')}\n</ol>`);
+}
+
+/**
  * Push/pop over every emitted tag. This is a self-check on the renderer, not on
  * the input: unbalanced output means a bug here, and Confluence would reject
  * (or silently mangle) the page — so we refuse to hand it back.
@@ -948,7 +1054,9 @@ function checkBalance(xml) {
  * index table and whether "<!-- children -->" is legal. `bodyLineOffset` (when
  * the caller knows where publishBody starts in the file) shifts RenderError
  * lines into whole-file coordinates; without it they are relative to
- * publishBody. `ctx.retired` prepends the retirement warning panel.
+ * publishBody. `ctx.retired` prepends the retirement warning panel. A
+ * "## Claims" section in publishBody leaves the flow entirely and comes back
+ * as the trailing claims expand (§15.2).
  */
 export function renderStorage(page, ctx = {}) {
   const fields = page?.fields ?? {};
@@ -964,7 +1072,11 @@ export function renderStorage(page, ctx = {}) {
   };
   const isIndex = Array.isArray(ctx.children) || kindKey === 'index' || ctx.kind?.label === 'index';
 
-  const blocks = parseBlocks(toLines(page?.publishBody, Number(page?.bodyLineOffset) || 0));
+  const { bodyLines, claimLines, headingLine } = extractClaims(
+    toLines(page?.publishBody, Number(page?.bodyLineOffset) || 0)
+  );
+  const claims = headingLine === null ? null : parseClaims(claimLines, headingLine);
+  const blocks = parseBlocks(bodyLines);
 
   let markerAt = -1;
   blocks.forEach((block, k) => {
@@ -995,6 +1107,7 @@ export function renderStorage(page, ctx = {}) {
     if (table) parts.push(table);
     parts.push(renderBlocks(blocks.slice(markerAt + 1), rc));
   }
+  if (claims) parts.push(claimsMacro(claims, config));
 
   const xml = parts.filter(Boolean).join('\n');
   checkBalance(xml);
@@ -1003,6 +1116,7 @@ export function renderStorage(page, ctx = {}) {
 
 const PLAIN_TEXT_STRIPPERS = [
   [/!\[[^\]]*\]\([^)]*\)/g, ''],
+  [/\[\^[1-9]\d?\]/g, ''],
   [/\[\[status:[^|\]]*\|([^\]]*)\]\]/g, '$1'],
   [/\[([^\]]*)\]\([^)]*\)/g, '$1'],
   [/`+/g, ''],

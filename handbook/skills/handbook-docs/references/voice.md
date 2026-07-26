@@ -118,16 +118,36 @@ five short paragraphs or a short list. No sequence yet.
 
 ## How it behaves
 
-The observable behavior: the steps someone takes, what they see at each one,
-what happens on the unhappy paths (already taken, not permitted, nothing found).
-Use a bulleted list or a small table when the behavior is conditional.
+The observable behavior as numbered steps — one line per step of the main flow,
+in the order the person experiences it. Unhappy paths (already taken, not
+permitted, nothing found) hang as sub-bullets off the step where they happen. A
+small table when the behavior is conditional. Paragraphs only for what a list
+genuinely cannot say.
+
+1. Someone opens the team list and enters the email address of the person they
+   want to add.
+2. That person appears on the list as **Invited** and gets an email with a join
+   link.
+   - If they are already on the team, nothing is sent and the form says so.
+   - If the address is not one the workspace allows, the invite is refused and
+     the form explains why.
+3. They become a full member the moment they open the link.[^1]
 
 ## Limits & known gaps
 
-What it does not do, the ceilings, and the situations where it behaves in a way
-that would surprise someone. Written as plainly as the capabilities above.
-"None" is almost never true — if you truly believe there are no limits, you have
-not read enough of the code.
+One limit per bullet, the crisp fact first, written as plainly as the
+capabilities above. "None" is almost never true — if you truly believe there are
+no limits, you have not read enough of the code. At most one `> [!WARNING]`
+callout, saved for the limit most likely to burn someone.
+
+- An invite expires 14 days after it is sent, and then has to be sent again.[^2]
+- Invites go out one address at a time — there is no way to invite a whole list.
+- A pending invite can be cancelled, but the email already sent cannot be recalled.
+
+## Claims
+
+[^1]: src/invites/accept.ts:64 @ 9f3ac21 — opening the link marks the invite accepted and creates the membership in the same step
+[^2]: src/invites/service.ts:88 @ 9f3ac21 — an invite is created with a 14-day expiry and refused after it
 
 ## Editorial
 
@@ -141,6 +161,14 @@ Audience-check: clean — 6 claims verified, reviewer clean
 (local only, never published) Confirmed gate findings, verbatim, when the page
 was sent back to draft.
 ```
+
+`## Claims` is written by the audience gate, not by hand: one line per `[^N]`
+marker left standing after the claim-checkers, each carrying the path, the line,
+the short sha of the commit the claim was verified against, and one sentence of
+mechanism. It publishes — collapsed, after the body, under "Where these claims
+come from (technical)" — and it is the only place on the page where a path may
+appear. Nothing else may live in that section (a stray paragraph there is a
+render error), and it always sits above `## Editorial`.
 
 Optional extras between the required sections, when the feature earns them:
 

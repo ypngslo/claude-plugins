@@ -149,7 +149,7 @@ process.stdin.setEncoding('utf8');
 for await (const chunk of process.stdin) md += chunk;
 const ctx = {
   config: {
-    repoUrl: '',
+    repoUrl: process.env.HB_RENDER_REPO_URL ?? '',
     titlePrefix: '',
     render: { toc: 'never', banner: false, codeLanguages: ['bash', 'json', 'python'] },
   },
@@ -941,5 +941,130 @@ RC=0; env -u CONFLUENCE_EMAIL -u CONFLUENCE_API_TOKEN node "$CLI" sync --repo "$
 [ "$RC" = "0" ] || fail "envFile credentials did not work (exit $RC)"
 [ "$(counter createPage)" = "$((BEFORE_CREATE + 1))" ] || fail "the envFile page was not created"
 [ -n "$(page_id env-file-check)" ] || fail "no pageId written back for the envFile page"
+
+# =============================================================================
+# 27. claim citations — renderer goldens and refusals
+# =============================================================================
+# The harness renders with an empty repoUrl by default; the linked form needs one.
+export HB_RENDER_REPO_URL="https://example.invalid/handbook"
+
+render_case <<'EOF'
+Shoppers can pay for everything in their basket in one go.[^1]
+
+## Claims
+
+[^1]: store/checkout/rules.txt:42 @ a1b2c3d4e5 — The checkout step charges the whole basket once.
+EOF
+has '<sup>1</sup>'
+has 'ac:name="expand"'
+has 'ac:name="title">Where these claims come from (technical)<'
+has '<ol>'
+has '/blob/a1b2c3d4e5/'
+has '#L42'
+has 'href="https://example.invalid/handbook/blob/a1b2c3d4e5/store/checkout/rules.txt#L42"'
+has 'The checkout step charges the whole basket once.'
+hasnt '<h2>Claims</h2>'
+
+# No sha in the definition — the link falls back to HEAD, and no line means no #L.
+render_case <<'EOF'
+Shoppers see the total before they pay.[^2]
+
+## Claims
+
+[^2]: store/checkout/total.txt — The total is worked out before the payment step.
+EOF
+has 'href="https://example.invalid/handbook/blob/HEAD/store/checkout/total.txt"'
+hasnt '#L'
+
+unset HB_RENDER_REPO_URL
+# Without repoUrl the citation still publishes, as plain text.
+render_case <<'EOF'
+Shoppers can pay for everything in their basket in one go.[^1]
+
+## Claims
+
+[^1]: store/checkout/rules.txt:42 @ a1b2c3d4e5 — The checkout step charges the whole basket once.
+EOF
+has 'ac:name="title">Where these claims come from (technical)<'
+has 'store/checkout/rules.txt:42'
+hasnt '<a href'
+
+render_refuses "a malformed claims definition" 5 <<'EOF'
+Shoppers can pay for everything in their basket in one go.[^1]
+
+## Claims
+
+this line is not a claim definition
+EOF
+
+render_refuses "an empty claims section" 3 <<'EOF'
+Shoppers can pay for everything in their basket in one go.
+
+## Claims
+EOF
+
+# =============================================================================
+# 28. claim lint — undefined markers block, claim paths do not, walls warn
+# =============================================================================
+page claim-undefined "Missing Claim" glossary "" "" draft false <<'EOF'
+The team promises to keep this page short and true for everyone who reads it.[^1]
+EOF
+lint_refuses claim-undefined "a claim marker with no definition"
+rm "$PAGES/claim-undefined.md"
+
+# The one deliberately-technical block: the path rule must not fire inside it.
+page claim-paths "Claim Paths" glossary "" "" draft false <<'EOF'
+Shoppers can pay for everything in their basket in one go.[^1]
+
+## Claims
+
+[^1]: src/checkout/basket.ts:42 @ a1b2c3d4e5 — The basket is charged once when the shopper pays.
+EOF
+hb_rc lint claim-paths
+[ "$RC" = "0" ] || fail "a claims definition tripped the path rule (exit $RC)"
+rm "$PAGES/claim-paths.md"
+
+page wall-page "Wall Of Text" glossary "" "" draft false <<'EOF'
+This page explains one small part of the product in plain words for anyone who wants to know what it promises the people who use it.
+
+## How it behaves
+
+The product asks a shopper for their payment details once and then confirms the order on the screen right away.
+
+The product also sends a short note to the shopper by email so that they have a record of what they bought.
+
+The product keeps the order open for a little while in case the shopper wants to change where it should be sent.
+EOF
+OUT="$(hb_out lint wall-page)"
+echo "$OUT" | grep -q 'wall-of-text' || fail "three paragraphs in one section did not warn"
+echo "$OUT" | grep -q 'consecutive paragraphs' || fail "the wall-of-text warning does not say what it counted"
+echo "$OUT" | grep -q 'How it behaves' || fail "the wall-of-text warning does not name the section"
+hb_rc lint wall-page
+[ "$RC" = "0" ] || fail "a wall-of-text warning must not block (exit $RC)"
+rm "$PAGES/wall-page.md"
+
+# =============================================================================
+# 29. claim citations end to end — markers and the expand macro reach Confluence
+# =============================================================================
+page claims-page "Where Claims Come From" glossary "" "" published true <<'EOF'
+This page explains one small part of the product in plain words for anyone who wants to know what the product promises the people who use it.
+
+## What it means
+
+Shoppers can pay for everything in their basket in one go.[^1]
+
+## Claims
+
+[^1]: store/checkout/rules.txt:12 @ a1b2c3d4e5 — The checkout step charges the whole basket once.
+
+## Editorial
+
+Audience-check: clean — 1 claim verified, reviewer clean
+EOF
+hb_sync
+[ -n "$(page_id claims-page)" ] || fail "no pageId written back for the claims page"
+state | grep -q '<sup>1</sup>' || fail "the claim marker did not publish as a superscript"
+state | grep -q 'Where these claims come from (technical)' || fail "the claims expand macro did not publish"
+state | grep -q 'blob/a1b2c3d4e5/store/checkout/rules.txt#L12' || fail "the published citation is not sha-pinned"
 
 echo "ALL PASS"

@@ -42,7 +42,9 @@ first; its gate sequence and single-write rule govern every write below.
 8. **Run the gate on every page you touched**, exactly as the skill specifies:
    lint clean → `handbook:audience-reviewer` → one `handbook:claim-checker` per
    load-bearing claim in parallel → then ONE write that carries both the
-   `## Editorial` trail and the final `status:`. Two writes fire two hook syncs
+   `## Editorial` trail and the final `status:` — and, on a clean pass, the
+   `## Claims` section rebuilt from the checkers' evidence (path, line, HEAD short
+   sha, mechanism) in that same single write. Two writes fire two hook syncs
    and publish a half-finished page.
 9. A page that is already `published` republishes on its content update — no
    approval needed. A page publishing for the FIRST time needs the human's
