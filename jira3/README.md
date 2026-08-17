@@ -94,6 +94,18 @@ findings as a Jira comment as it transitions the issue to To Do, then work resum
 until a fresh review passes clean. Like `## Report`, the `## Rework` section is
 excluded from the Jira description; its comment rides the todo transition.
 
+### Field sections (custom fields)
+
+Optional config `fieldSections` maps additional body headings to Jira field
+ids, e.g. `"fieldSections": { "Instructions": "customfield_10074" }`. A
+`## Instructions` section is then stripped from the description and synced to
+that field — so the description can stay a short, non-technical summary while
+the technical work spec lives in its own field. Sections are only sent when
+present, so issue types whose screens lack the field (e.g. Epics) are never
+touched; deleting a section leaves the field's last value in Jira (blank the
+section's content to clear it deliberately). The mapped field must be a
+plain-text field on the work type's screen.
+
 ## Commands / CLI
 
 - `/jira3:init` — scaffold + guided config in the current repo.

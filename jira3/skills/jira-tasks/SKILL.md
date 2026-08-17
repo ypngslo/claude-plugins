@@ -31,6 +31,16 @@ Body above `## Report` = the Jira description (write for a reader who has
 only Jira). The `## Report` section = the outcome summary; it is synced as a
 Jira comment when the item enters review.
 
+If config.json has a `fieldSections` map (e.g.
+`{ "Instructions": "customfield_10074" }`), each mapped heading is its own
+body section synced to that Jira field, stripped from the description. When
+configured, honor the split the project chose — e.g. with an `Instructions`
+mapping, write the description as a brief NON-TECHNICAL summary a
+stakeholder can read, and put the technical work spec (files, changes,
+pointers) under `## Instructions`. Acceptance criteria stay wherever the
+project's convention puts them; a section is only synced when non-empty, and
+epics typically don't carry these sections at all.
+
 ## Lifecycle — when to flip status
 
 - **Create** (`todo`): when work is planned. One file per parallelizable item.

@@ -267,6 +267,43 @@ node "$CLI" sync --repo "$REPO" >/dev/null
 AFTER="$(state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const c=JSON.parse(d).counters;console.log(`${c.create},${c.update}`)})')"
 [ "$BEFORE" = "$AFTER" ] || fail "labeled sync not idempotent (create,update $BEFORE → $AFTER)"
 
+# --- fieldSections: "## Instructions" syncs to a mapped custom field -----------
+cat > "$REPO/jira/config.json" <<'EOF'
+{ "site": "mock.invalid", "projectKey": "TT",
+  "emailEnv": "MPMT_JIRA_EMAIL", "tokenEnv": "MPMT_JIRA_TOKEN", "envFile": ".env",
+  "labels": ["repo-a"],
+  "fieldSections": { "Instructions": "customfield_90001" },
+  "statusMap": { "todo": "To Do", "in_progress": "In Progress", "review": "Testing", "done": "Done" } }
+EOF
+cat > "$REPO/jira/tasks/widget-c.md" <<'EOF'
+---
+summary: Build widget C
+status: todo
+type: task
+jiraKey:
+approved: false
+---
+Plain-English summary for non-technical readers.
+
+## Instructions
+
+Refactor src/widget-c.ts:12 to use the rotation helper.
+EOF
+node "$CLI" sync --repo "$REPO" >/dev/null
+state | grep -q '"customfield_90001":"Refactor src/widget-c.ts:12 to use the rotation helper."' || fail "instructions did not reach the custom field"
+state | grep -q '"description":"[^"]*Refactor src' && fail "instructions leaked into description"
+
+# fieldSections ride the content hash: editing only the section pushes an update
+sed -i 's/rotation helper/shared rotation helper/' "$REPO/jira/tasks/widget-c.md"
+node "$CLI" sync --repo "$REPO" >/dev/null
+state | grep -q 'shared rotation helper' || fail "instructions edit not pushed"
+
+# ...and adding fieldSections to config alone causes no writes to section-less tasks
+BEFORE="$(state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).counters.update))')"
+node "$CLI" sync --repo "$REPO" >/dev/null
+AFTER="$(state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).counters.update))')"
+[ "$BEFORE" = "$AFTER" ] || fail "fieldSections config caused spurious updates"
+
 # --- malformed labels refused up front ------------------------------------------
 cat > "$REPO/jira/config.json" <<'EOF'
 { "site": "mock.invalid", "projectKey": "TT", "labels": ["has space"],

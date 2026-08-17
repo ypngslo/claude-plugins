@@ -313,14 +313,22 @@ function loadTasks(config) {
 // sections ride along as COMMENTS on status transitions — audit trail without
 // model tokens: "## Report" (builder's outcome summary) on the transition to
 // review; "## Rework" (auto-review findings) on the transition back to todo.
-export function splitBody(body) {
-  const parts = { description: body.trim(), report: null, rework: null };
-  const headings = [...body.matchAll(/^## (Report|Rework)\s*$/gm)];
+// Headings named in config `fieldSections` are also lifted out of the
+// description and returned under `sections` (keyed by heading name) so the
+// sync can write them to mapped Jira fields — e.g. "## Instructions" → a
+// custom text field.
+export function splitBody(body, sectionNames = []) {
+  const parts = { description: body.trim(), report: null, rework: null, sections: {} };
+  const names = [...new Set(['Report', 'Rework', ...sectionNames])];
+  const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const headings = [...body.matchAll(new RegExp(`^## (${escaped.join('|')})\\s*$`, 'gm'))];
   if (!headings.length) return parts;
   parts.description = body.slice(0, headings[0].index).trim();
   headings.forEach((m, i) => {
     const end = i + 1 < headings.length ? headings[i + 1].index : body.length;
-    parts[m[1].toLowerCase()] = body.slice(m.index + m[0].length, end).trim() || null;
+    const content = body.slice(m.index + m[0].length, end).trim() || null;
+    if (m[1] === 'Report' || m[1] === 'Rework') parts[m[1].toLowerCase()] = content;
+    else if (content) parts.sections[m[1]] = content;
   });
   return parts;
 }
@@ -344,17 +352,34 @@ async function syncOnce(config, request, state) {
   const tasks = loadTasks(config);
   const { types, defaultKey } = resolveTypes(config);
   const labels = resolveLabels(config);
+  // Optional config `fieldSections` maps body headings to Jira field ids:
+  //   "fieldSections": { "Instructions": "customfield_10074" }
+  // A matching "## Instructions" section is stripped from the description and
+  // written to that field. Only sent when the section exists, so issue types
+  // whose screens lack the field (e.g. Epics) never receive it — which also
+  // means deleting a section leaves the field's last value in Jira (blank the
+  // section's content instead to clear it deliberately).
+  const fieldSections = config.fieldSections ?? {};
   let failures = 0;
 
   for (const task of tasks) {
     const { id, fields } = task;
-    const { description, report, rework } = splitBody(task.body);
+    const { description, report, rework, sections } = splitBody(
+      task.body,
+      Object.keys(fieldSections)
+    );
+    const extraFields = {};
+    for (const [name, fieldId] of Object.entries(fieldSections))
+      if (sections[name]) extraFields[fieldId] = sections[name];
     const known = state.tasks[id] ?? {};
     // Labels ride the content hash so adding them to config retro-tags every
     // existing issue on the next pass; the no-labels hash stays byte-identical
     // to the historical form so upgrading the CLI alone causes zero updates.
+    // Field sections ride it the same way (and only when present).
     const contentHash = hash(
-      `${fields.summary}\n${description}${labels.length ? `\n${labels.join(',')}` : ''}`
+      `${fields.summary}\n${description}${labels.length ? `\n${labels.join(',')}` : ''}${
+        Object.keys(extraFields).length ? `\n${JSON.stringify(extraFields)}` : ''
+      }`
     );
 
     try {
@@ -368,6 +393,7 @@ async function syncOnce(config, request, state) {
             issuetype: { name: (types[fields.type] ?? types[defaultKey]).name },
             summary: fields.summary,
             description,
+            ...extraFields,
             labels: [...labels, labels.length ? `lt-${labels[0]}-${id}` : `lt-${id}`],
             ...(fields.epic && state.tasks[fields.epic]?.jiraKey
               ? { parent: { key: state.tasks[fields.epic].jiraKey } }
@@ -396,7 +422,7 @@ async function syncOnce(config, request, state) {
           // (which REPLACES the whole set and would clobber the lt- marker or
           // any hand-added labels).
           await request('PUT', `/issue/${jiraKey}`, {
-            fields: { summary: fields.summary, description },
+            fields: { summary: fields.summary, description, ...extraFields },
             ...(labels.length
               ? { update: { labels: labels.map((l) => ({ add: l })) } }
               : {}),
