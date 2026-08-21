@@ -90,13 +90,17 @@ owns names. Default bank (config `kinds` is spread OVER this, so projects extend
   "glossary":      { "label": "glossary",      "requireSources": false, "allowCodeBlocks": false, "requiredSections": [] },
   "release-notes": { "label": "release-notes", "requireSources": false, "allowCodeBlocks": false, "requiredSections": [] },
   "observations":  { "label": "observations",  "requireSources": false, "allowCodeBlocks": false, "requiredSections": [] },
-  "reference":     { "label": "reference",     "requireSources": true,  "allowCodeBlocks": true,  "requiredSections": [] }
+  "reference":     { "label": "reference",     "requireSources": true,  "allowCodeBlocks": true,  "requiredSections": [] },
+  "general":       { "label": "general",       "requireSources": false, "allowCodeBlocks": true,  "audienceLint": false, "requiredSections": [] }
 }
 ```
 
 `requiredSections` are exact `## <name>` headings that must exist in the publish body.
-An unknown `kind:` in a page is that page's error (not a whole-pass abort).
-`resolveKinds(config)` (exported by docs-sync.mjs) returns the merged bank.
+`audienceLint` (0.4.0) defaults to `true` and is opt-out only: a kind with
+`audienceLint: false` skips lint's vocabulary rules and readability warnings (§8) — the
+secret scan, structure rules and claim-marker rules always run. An unknown `kind:` in a
+page is that page's error (not a whole-pass abort). `resolveKinds(config)` (exported by
+docs-sync.mjs) returns the merged bank.
 
 ## 4. Page file format
 
@@ -113,6 +117,7 @@ so `title: "[Beta] Checkout"` is the string `[Beta] Checkout`.
 | `title` | string | model | Confluence title (prefix applied at push). Unique per space — enforced by lint across the suite |
 | `kind` | kind key | model | selects structural rules + kind label |
 | `parent` | slug or empty | model | empty ⇒ mount under `config.parentPageId`/homepage. Cycles = per-page error naming the cycle |
+| `parentId` | digits or empty | model | (0.4.0) a raw Confluence page id — mounts under any existing page, handbook-managed or not. Wins over `parent:`; lint errors if both are set or if it is not all digits |
 | `order` | int, default 100 | model | sibling sort in generated index tables only |
 | `sources` | [pathspecs] | model | the code this page documents; git pathspecs, globs allowed |
 | `unanchored` | bool | model | explicit opt-out of `requireSources` |
@@ -398,7 +403,8 @@ whole file).
   `localhost:\d+`, `*.internal`/`*.local` hosts, ≥32-char base64/hex runs adjacent to
   `key|token|secret`, and every KEY NAME found in the repo's `.env` (names only, values never read into messages)
 - *structure*: `#` H1; missing `requiredSections` for the kind; duplicate effective titles
-  across the suite; `parent:` slug not found; parent cycle; `.md` cross-link target not
+  across the suite; `parent:` slug not found; parent cycle; `parentId:` not all digits;
+  `parent:` and `parentId:` both set; `.md` cross-link target not
   found; `requireSources` unsatisfied without `unanchored: true`; unknown `kind`;
   `status: retired` present while file still linked from an index page
 
@@ -423,6 +429,13 @@ export function publishGateReason(page, lint) {
   return null;
 }
 ```
+
+**Kinds with `audienceLint: false`** (the default `general` kind): the shape rules, the
+jargon bank, the readability warnings and the wall-of-text warning are skipped for the
+whole page. The secret scan, every structure rule, and the claim-marker rules run
+unchanged; `publishGateReason` is unchanged too — the page still needs its `## Editorial`
+`Audience-check:` trail, which for this kind honestly records that the audience check was
+not applied.
 
 ## 9. Staleness — `bin/gitinfo.mjs`
 
@@ -749,3 +762,35 @@ Attachments/local images (v1 multipart + `X-Atlassian-Token: nocheck`; designed,
 to 0.2) · Confluence folders (no list/update endpoints) · sibling ordering in the
 Confluence sidebar (index tables are the navigation surface) · bidirectional merge ·
 `?purge=true` · ADF / `wiki` representations · server-side conversion APIs.
+
+## 17. Changes in 0.4.0 — general pages + `/handbook:add`
+
+The suite is for documenting the product to a PM reader; 0.4.0 adds the one-off path
+for everything else a human wants in Confluence — decision records, explainers,
+runbooks, meeting notes — without bending the gate the suite depends on.
+
+- **`general` kind** in the default bank: `requireSources: false`, `allowCodeBlocks: true`,
+  `audienceLint: false`, no required sections. Label `general`.
+- **`audienceLint`** — the fifth structural kind property (§3), opt-out only. Lint skips
+  `contentRules`, `readabilityRules` and `wallOfText` for kinds that set it `false`;
+  `secretScan`, `structureRules` and `claimRules` never switch off (§8).
+- **`parentId:`** frontmatter (§4) — mount a page under any existing Confluence page by raw
+  id, managed or not. `resolveParentId` prefers it over `parent:`; lint refuses a
+  non-numeric value or both keys at once.
+- **`/handbook:add <what>`** (`commands/add.md`) — derive slug/title/placement from the
+  request (content from the user's words or a repo file converted into the markdown
+  subset), write the `general` page, `lint` + `render`, then ONE publish write with
+  `status: published` + `approved: true` + the honest trail
+  `Audience-check: not applied — general page, published on the requester's word; secret
+  scan + structure lint clean`, then a foreground `sync` and the page URL. The request is
+  the per-page approval; "draft it" leaves it `draft`. No parent prompt — root by default.
+- **Templates:** `templates/kinds/general.md` (new) and `templates/kinds/reference.md`
+  (was missing from the bank's template set).
+- **Docs:** SKILL.md "General pages" section + `parentId` row; README kinds paragraph and
+  command list.
+- **Tests:** `general` page with identifiers/paths/commands/jargon/a fence lints clean and
+  publishes with the `general` label; the same prose on a `feature` page is refused; a
+  `general` page with a secret is refused; `parentId` mounts under a raw id; `parentId`
+  with `parent:` and a non-numeric `parentId` are lint errors.
+
+Attachments/local images remain deferred (now 0.5).

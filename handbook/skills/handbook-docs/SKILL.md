@@ -27,8 +27,9 @@ frontmatter, never in directories: moving a page is a one-line `parent:` edit.
 | Key | Values | Who writes it |
 | --- | ------ | ------------- |
 | `title` | the page title a PM would recognize; unique across the suite | you, at creation |
-| `kind` | a key of config's `kinds` (`index`, `overview`, `feature`, `capabilities`, `glossary`, `release-notes`, `observations`, `reference`) | you, at creation — the kind picks the required sections and the page's label |
+| `kind` | a key of config's `kinds` (`index`, `overview`, `feature`, `capabilities`, `glossary`, `release-notes`, `observations`, `reference`, `general`) | you, at creation — the kind picks the required sections and the page's label |
 | `parent` | slug of the parent page; empty = mounts at the configured root | you |
+| `parentId` | a raw Confluence page id (digits) — mounts under any existing page, managed or not; never together with `parent` | you, for `general` pages that belong outside the suite tree |
 | `order` | integer, default 100 — sibling sort in generated index tables | you |
 | `sources` | `[pathspecs]` — the code this page documents | you, from code you actually read |
 | `unanchored` | `true` = explicit opt-out of the `sources:` requirement | you, deliberately and rarely |
@@ -252,6 +253,35 @@ investigation establishes it and a normal gate pass verifies it (the alternative
 being that the thing gets fixed, or is resolved as a non-issue and the line is
 removed).
 
+## General pages — the one-off path (`/handbook:add`)
+
+Everything above is for documenting the product to a PM reader. Sometimes the
+human just wants *a thing* in Confluence — a decision record, an explainer for a
+stakeholder, a runbook, meeting notes, a design note. That is the `general`
+kind, and `/handbook:add` is its command:
+
+- **What it is held to:** the renderer's markdown subset, the structure rules
+  (no H1, unique title, valid parent/links) and the secret scan — **nothing
+  else.** No `sources:` requirement, code blocks allowed, and the vocabulary
+  rules (identifiers, paths, commands, jargon, readability) do not run on it.
+  The page says what the requester asked it to say, in their words if they gave
+  them.
+- **Approval is the request.** "Put this in Confluence" / `/handbook:add …` is
+  the human's explicit, per-page word — so the publish write sets
+  `status: published`, `approved: true`, and an honest trail
+  (`Audience-check: not applied — general page, published on the requester's
+  word; secret scan + structure lint clean`) in **one** write. If they asked for
+  a draft or to see it first, it stays `draft`.
+- **Placement:** `parent:` for a suite page, `parentId:` for any existing
+  Confluence page by id, nothing for the configured root. Never both.
+- **It stays a mirrored file.** Editing the file updates the page; someone
+  editing it in Confluence shows up in the `pull` drift report and is overwritten
+  by the next local write; `/handbook:retire` removes it; deleting the file
+  orphans it. Same rules as every other page.
+- **It is not a way around the gate.** A page that documents how the product
+  behaves for its users is a `feature`/`overview`/`capabilities` page and goes
+  through `/handbook:new` and the audience gate, however tempting the shortcut.
+
 ## What you never do
 
 - **Never call Confluence** — no REST, no MCP, no curl. The CLI owns all
@@ -276,6 +306,8 @@ removed).
 - `/handbook:publish` — force a foreground sync and report every action and
   refusal.
 - `/handbook:new <feature>` · `/handbook:retire <slug>` — add or retire one page.
+- `/handbook:add <what>` — one ad-hoc `general` page, published on the request
+  (see "General pages" above).
 - `/handbook:restyle` — one-time whole-suite pass to the current section shapes +
   claim citations; facts unchanged, routine work stays with `/handbook:refresh`.
 - `node <plugin>/bin/docs-sync.mjs pull --repo .` — read-only drift report

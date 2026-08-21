@@ -1067,4 +1067,91 @@ state | grep -q '<sup>1</sup>' || fail "the claim marker did not publish as a su
 state | grep -q 'Where these claims come from (technical)' || fail "the claims expand macro did not publish"
 state | grep -q 'blob/a1b2c3d4e5/store/checkout/rules.txt#L12' || fail "the published citation is not sha-pinned"
 
+# =============================================================================
+# 30. general pages (0.4.0) — audienceLint off, parentId, and the rules that stay on
+# =============================================================================
+# The same technical prose, twice: a `general` page lints clean and publishes
+# with its kind label; a `feature` page is refused. This is the whole contract
+# of audienceLint: the vocabulary rules are per kind, the secret scan is not.
+TECHNICAL_BODY=$(cat <<'EOF'
+A one-off decision record the team asked to keep in Confluence, written for the engineers who will act on it rather than for a product reader.
+
+## Decision
+
+We keep the `useListUrlState` hook in src/shared/hooks/use-list-url-state.ts and call the endpoint from the schema migration. Run `pnpm test` before merging.
+
+```bash
+pnpm test
+```
+
+## Editorial
+
+Audience-check: not applied — general page, published on the requester's word; secret scan + structure lint clean
+EOF
+)
+printf '%s\n' "$TECHNICAL_BODY" | page gen-decision "Decision: List State Hook" general "" "" published true
+hb_rc lint gen-decision
+[ "$RC" = "0" ] || fail "a general page was refused for technical vocabulary (audienceLint should be off for it)"
+hb_sync
+[ -n "$(page_id gen-decision)" ] || fail "the general page did not publish"
+GEN_ID="$(page_id gen-decision)"
+case "$(labels_of "$GEN_ID")" in *general*) : ;; *) fail "the general page did not get its kind label" ;; esac
+
+printf '%s\n' "$TECHNICAL_BODY" | page gen-feature "Decision As Feature" feature "" "store/checkout" draft false
+lint_refuses gen-feature "the same technical prose on a feature page (audienceLint must stay on for it)"
+rm "$PAGES/gen-feature.md"
+
+# The secret scan never switches off — a local-port literal is one of its patterns.
+page gen-secret "General With A Secret" general "" "" draft false <<'EOF'
+A one-off note that happens to carry an address the secret scan refuses.
+
+## Where it runs
+
+The service answers on localhost:3050 during development.
+EOF
+lint_refuses gen-secret "a general page carrying a secret-scan pattern"
+rm "$PAGES/gen-secret.md"
+
+# Structure rules never switch off either — an H1 is still an H1.
+page gen-h1 "General With H1" general "" "" draft false <<'EOF'
+# A heading the frontmatter already provides
+
+A one-off note that repeats its title as a level-one heading.
+EOF
+lint_refuses gen-h1 "an H1 on a general page"
+rm "$PAGES/gen-h1.md"
+
+# parentId: mount under a raw Confluence id (here: a page the suite happens to own,
+# but the CLI treats it as an opaque id — no slug, no state lookup).
+CLAIMS_ID="$(page_id claims-page)"
+page gen-child "Under A Raw Page Id" general "" "" published true "parentId: $CLAIMS_ID" <<'EOF'
+A one-off page filed under an existing Confluence page by its id rather than by a suite slug.
+
+## Body
+
+Nothing here depends on the page above it being managed by handbook.
+
+## Editorial
+
+Audience-check: not applied — general page, published on the requester's word; secret scan + structure lint clean
+EOF
+hb_rc lint gen-child
+[ "$RC" = "0" ] || fail "lint refused a valid numeric parentId"
+hb_sync
+CHILD_ID="$(page_id gen-child)"
+[ -n "$CHILD_ID" ] || fail "the parentId page did not publish"
+[ "$(page_field "$CHILD_ID" parentId)" = "$CLAIMS_ID" ] || fail "parentId page was not created under the raw id (got '$(page_field "$CHILD_ID" parentId)', want '$CLAIMS_ID')"
+
+page gen-both "Parent And ParentId" general claims-page "" draft false "parentId: $CLAIMS_ID" <<'EOF'
+A page that names both a suite parent and a raw parent id, which lint must refuse.
+EOF
+lint_refuses gen-both "parent: and parentId: set together"
+rm "$PAGES/gen-both.md"
+
+page gen-badid "Bad Parent Id" general "" "" draft false "parentId: not-a-number" <<'EOF'
+A page whose parent id is not a Confluence page id, which lint must refuse.
+EOF
+lint_refuses gen-badid "a non-numeric parentId"
+rm "$PAGES/gen-badid.md"
+
 echo "ALL PASS"

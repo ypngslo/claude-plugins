@@ -72,10 +72,17 @@ handbook itself wrote — hand-added labels survive forever. `titlePrefix` is th
 escape hatch for Confluence's space-wide title uniqueness.
 
 Pages are typed by **kind** (`index`, `overview`, `feature`, `capabilities`,
-`glossary`, `release-notes`, `observations`, `reference`). The tool knows only structural
-properties — required sections, whether sources are mandatory, whether code
-blocks are allowed — and the project owns the vocabulary: `kinds` in config is
-spread over the defaults, so a repo can add or override kinds freely.
+`glossary`, `release-notes`, `observations`, `reference`, `general`). The tool knows only
+structural properties — required sections, whether sources are mandatory, whether code
+blocks are allowed, whether the audience vocabulary rules apply — and the project owns
+the vocabulary: `kinds` in config is spread over the defaults, so a repo can add or
+override kinds freely.
+
+`general` is the one-off kind: anything a human explicitly asks to put in Confluence (a
+decision record, an explainer, a runbook) that is not product documentation. No sources,
+code allowed, no vocabulary rules — the secret scan and structure rules still apply — and
+its publish is the request itself (`/handbook:add`). A page can also mount under any
+existing Confluence page by id (`parentId:`), managed by handbook or not.
 
 ## Lifecycle contract (enforced by `skills/handbook-docs`)
 
@@ -150,6 +157,10 @@ on a source-file write** — staleness is derived on demand, not maintained.
   `observations` page — captured incidentally, never hunted for.
 - `/handbook:new <feature>` — one new page from its kind template, sources located
   in the code.
+- `/handbook:add <what>` — one ad-hoc `general` page, now: content from the user's
+  words or a repo file, placed under a suite page, any Confluence page id, or the
+  root; lint + render, then published on the request and synced in the foreground
+  with the URL reported.
 - `/handbook:refresh` — the main loop: stale → read the commits → update → gate →
   publish.
 - `/handbook:restyle` — one-time migration pass: restructure every existing page to
