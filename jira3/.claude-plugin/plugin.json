@@ -1,5 +1,5 @@
 {
   "name": "jira3",
   "description": "Local-first Jira tracking: task files in the repo are the source of truth; a zero-dependency CLI mirrors them to Jira (create/update/transition/comment) via detached hooks, so the working session never spends tokens or wall-clock on Jira I/O. Includes git-flow: branches/PRs/CI verdicts derived from task files (epic branches, Jira-key naming for automatic Development-panel linking). Done transitions require explicit human approval.",
-  "version": "0.9.0"
+  "version": "0.9.1"
 }

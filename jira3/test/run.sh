@@ -337,6 +337,34 @@ sed -i 's/^status: todo/status: testing/' "$REPO/jira/tasks/widget-d.md"
 node "$CLI" sync --repo "$REPO" >/dev/null
 state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const i=JSON.parse(d).issues.find(x=>x.key==="TT-7");process.exit(i.fields.status==="Testing"?0:1)})' || fail "testing status did not transition"
 
+# --- late epic: a task created before its epic gets re-parented on update ------
+cat > "$REPO/jira/tasks/widget-e.md" <<'EOF'
+---
+summary: Build widget E
+status: todo
+type: task
+epic: epic-late
+jiraKey:
+approved: false
+---
+Widget E description.
+EOF
+node "$CLI" sync --repo "$REPO" >/dev/null   # epic-late.md doesn't exist yet → orphan
+grep -q 'jiraKey: TT-8' "$REPO/jira/tasks/widget-e.md" || fail "widget-e key not written back"
+state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const i=JSON.parse(d).issues.find(x=>x.key==="TT-8");process.exit(i.fields.parent?1:0)})' || fail "orphan unexpectedly parented"
+cat > "$REPO/jira/tasks/epic-late.md" <<'EOF'
+---
+summary: Late widgets epic
+status: todo
+type: epic
+jiraKey:
+approved: false
+---
+Epic that arrives after its child.
+EOF
+node "$CLI" sync --repo "$REPO" >/dev/null
+state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const i=JSON.parse(d).issues.find(x=>x.key==="TT-8");process.exit(i.fields.parent&&i.fields.parent.key==="TT-9"?0:1)})' || fail "late epic did not re-parent the orphan"
+
 # --- watch-merge flips review → testing on MERGED --------------------------------
 sed -i 's/^status: todo/status: review/' "$REPO/jira/tasks/widget-b.md"
 PATH="$STUB:$PATH" GH_STUB_STATE=MERGED node "$GITFLOW" watch-merge widget-b --repo "$REPO" >/dev/null 2>&1 || fail "watch-merge MERGED should exit 0"

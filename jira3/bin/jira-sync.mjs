@@ -406,14 +406,21 @@ async function syncOnce(config, request, state) {
             extraFields[spec.field] = ids.map((accountId) => ({ accountId }));
           }
         }
+      // The epic parent rides updates too (not just create), so a task whose
+      // epic gains its jiraKey later — or whose epic: field changes — gets
+      // re-parented on the next pass instead of staying an orphan forever.
+      // Only sent when resolvable: removing epic: locally does NOT un-parent
+      // the Jira issue.
+      const parentKey = fields.epic ? (state.tasks[fields.epic]?.jiraKey ?? null) : null;
       // Labels ride the content hash so adding them to config retro-tags every
       // existing issue on the next pass; the no-labels hash stays byte-identical
       // to the historical form so upgrading the CLI alone causes zero updates.
-      // Field sections and role fields ride it the same way (only when present).
+      // Field sections, role fields, and the parent ride it the same way (only
+      // when present).
       const contentHash = hash(
         `${fields.summary}\n${description}${labels.length ? `\n${labels.join(',')}` : ''}${
           Object.keys(extraFields).length ? `\n${JSON.stringify(extraFields)}` : ''
-        }`
+        }${parentKey ? `\nparent:${parentKey}` : ''}`
       );
       let jiraKey = fields.jiraKey || known.jiraKey;
 
@@ -427,9 +434,7 @@ async function syncOnce(config, request, state) {
             description,
             ...extraFields,
             labels: [...labels, labels.length ? `lt-${labels[0]}-${id}` : `lt-${id}`],
-            ...(fields.epic && state.tasks[fields.epic]?.jiraKey
-              ? { parent: { key: state.tasks[fields.epic].jiraKey } }
-              : {}),
+            ...(parentKey ? { parent: { key: parentKey } } : {}),
           },
         };
         if (DRY) {
@@ -454,7 +459,12 @@ async function syncOnce(config, request, state) {
           // (which REPLACES the whole set and would clobber the lt- marker or
           // any hand-added labels).
           await request('PUT', `/issue/${jiraKey}`, {
-            fields: { summary: fields.summary, description, ...extraFields },
+            fields: {
+              summary: fields.summary,
+              description,
+              ...extraFields,
+              ...(parentKey ? { parent: { key: parentKey } } : {}),
+            },
             ...(labels.length
               ? { update: { labels: labels.map((l) => ({ add: l })) } }
               : {}),

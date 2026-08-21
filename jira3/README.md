@@ -123,7 +123,10 @@ fields with per-repo defaults:
 Every non-container issue gets the fields on create and update; a task's
 frontmatter overrides per role (`owner: Ben`, or `owner: [a@x.com, b@x.com]`).
 References resolve to accountIds via `/user/search` (cached in
-`.sync-state.json`); bare accountIds pass through. Epics never receive the
+`.sync-state.json`); bare accountIds pass through. Since 0.9.1 the epic
+parent also rides content updates, so a task created before its epic (or
+re-pointed at another epic) is re-parented on the next pass instead of staying
+an orphan; removing `epic:` locally does not un-parent the Jira issue. Epics never receive the
 fields (their screens typically lack them). Pairs well with a Jira automation
 that re-assigns the issue from these fields on status transitions — e.g.
 assign the Reviewer on In Review, the Tester on Testing.
