@@ -280,7 +280,7 @@ function jiraClient(config, creds) {
 // ---------------------------------------------------------------------------
 // task loading + validation
 // ---------------------------------------------------------------------------
-const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
+const VALID_STATUSES = ['todo', 'in_progress', 'review', 'testing', 'done'];
 
 function loadTasks(config) {
   if (!fs.existsSync(TASKS_DIR)) return [];
@@ -360,6 +360,27 @@ async function syncOnce(config, request, state) {
   // means deleting a section leaves the field's last value in Jira (blank the
   // section's content instead to clear it deliberately).
   const fieldSections = config.fieldSections ?? {};
+  // Optional config `roleFields` maps role names to Jira user-picker (array)
+  // fields with per-repo defaults:
+  //   "roleFields": { "owner": { "field": "customfield_10075",
+  //                              "default": ["<accountId, email, or name>"] } }
+  // A task's frontmatter can override per role (`owner: Ben` or
+  // `owner: [a@x.com, b@x.com]`). References resolve to accountIds via
+  // /user/search (cached in .sync-state.json); bare accountIds pass through.
+  // Container types (epics) never carry the fields — their screens lack them.
+  const roleFields = config.roleFields ?? {};
+  state.users ??= {};
+  const resolveUser = async (ref) => {
+    if (/^[0-9a-zA-Z]+:[0-9a-f-]+$/i.test(ref)) return ref;
+    if (state.users[ref]) return state.users[ref];
+    const found = await request('GET', `/user/search?query=${encodeURIComponent(ref)}`);
+    const users = (found ?? []).filter((u) => u.accountType !== 'app');
+    if (!users.length) throw new Error(`no Jira user matches "${ref}"`);
+    if (users.length > 1)
+      warn(`"${ref}" matches ${users.length} users — using ${users[0].displayName}`);
+    state.users[ref] = users[0].accountId;
+    return users[0].accountId;
+  };
   let failures = 0;
 
   for (const task of tasks) {
@@ -368,21 +389,32 @@ async function syncOnce(config, request, state) {
       task.body,
       Object.keys(fieldSections)
     );
-    const extraFields = {};
-    for (const [name, fieldId] of Object.entries(fieldSections))
-      if (sections[name]) extraFields[fieldId] = sections[name];
     const known = state.tasks[id] ?? {};
-    // Labels ride the content hash so adding them to config retro-tags every
-    // existing issue on the next pass; the no-labels hash stays byte-identical
-    // to the historical form so upgrading the CLI alone causes zero updates.
-    // Field sections ride it the same way (and only when present).
-    const contentHash = hash(
-      `${fields.summary}\n${description}${labels.length ? `\n${labels.join(',')}` : ''}${
-        Object.keys(extraFields).length ? `\n${JSON.stringify(extraFields)}` : ''
-      }`
-    );
 
     try {
+      const extraFields = {};
+      for (const [name, fieldId] of Object.entries(fieldSections))
+        if (sections[name]) extraFields[fieldId] = sections[name];
+      const isContainer = Boolean((types[fields.type] ?? types[defaultKey])?.container);
+      if (!isContainer)
+        for (const [role, spec] of Object.entries(roleFields)) {
+          const refs = fields[role] ?? spec.default ?? [];
+          const list = (Array.isArray(refs) ? refs : [refs]).filter(Boolean);
+          if (list.length) {
+            const ids = [];
+            for (const ref of list) ids.push(await resolveUser(ref));
+            extraFields[spec.field] = ids.map((accountId) => ({ accountId }));
+          }
+        }
+      // Labels ride the content hash so adding them to config retro-tags every
+      // existing issue on the next pass; the no-labels hash stays byte-identical
+      // to the historical form so upgrading the CLI alone causes zero updates.
+      // Field sections and role fields ride it the same way (only when present).
+      const contentHash = hash(
+        `${fields.summary}\n${description}${labels.length ? `\n${labels.join(',')}` : ''}${
+          Object.keys(extraFields).length ? `\n${JSON.stringify(extraFields)}` : ''
+        }`
+      );
       let jiraKey = fields.jiraKey || known.jiraKey;
 
       // -- create ----------------------------------------------------------

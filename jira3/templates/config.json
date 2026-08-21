@@ -25,7 +25,7 @@
   "statusMap": {
     "todo": "To Do",
     "in_progress": "In Progress",
-    "review": "Testing",
+    "review": "In Review",
     "done": "Done"
   },
   "github": {

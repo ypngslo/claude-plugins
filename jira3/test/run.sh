@@ -304,6 +304,45 @@ node "$CLI" sync --repo "$REPO" >/dev/null
 AFTER="$(state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).counters.update))')"
 [ "$BEFORE" = "$AFTER" ] || fail "fieldSections config caused spurious updates"
 
+# --- roleFields + testing status -----------------------------------------------
+cat > "$REPO/jira/config.json" <<'EOF'
+{ "site": "mock.invalid", "projectKey": "TT",
+  "emailEnv": "MPMT_JIRA_EMAIL", "tokenEnv": "MPMT_JIRA_TOKEN", "envFile": ".env",
+  "labels": ["repo-a"],
+  "roleFields": {
+    "owner":    { "field": "customfield_80001", "default": ["Mickey Mock"] },
+    "reviewer": { "field": "customfield_80002", "default": ["712020:abcd-ef01"] }
+  },
+  "statusMap": { "todo": "To Do", "in_progress": "In Progress", "review": "In Review", "testing": "Testing", "done": "Done" } }
+EOF
+cat > "$REPO/jira/tasks/widget-d.md" <<'EOF'
+---
+summary: Build widget D
+status: todo
+type: task
+jiraKey:
+approved: false
+owner: Ben Mock
+---
+Widget D description.
+EOF
+node "$CLI" sync --repo "$REPO" >/dev/null
+grep -q 'jiraKey: TT-7' "$REPO/jira/tasks/widget-d.md" || fail "widget-d key not written back"
+state | grep -q '"customfield_80001":\[{"accountId":"acc:benmock"}\]' || fail "owner frontmatter override not resolved to accountId"
+state | grep -q '"customfield_80002":\[{"accountId":"712020:abcd-ef01"}\]' || fail "accountId default not passed through"
+state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const i=JSON.parse(d).issues.find(x=>x.key==="TT-1");process.exit("customfield_80001" in i.fields ?1:0)})' || fail "role field sent to an epic"
+
+# testing is a first-class status: transitions to the mapped Jira status
+sed -i 's/^status: todo/status: testing/' "$REPO/jira/tasks/widget-d.md"
+node "$CLI" sync --repo "$REPO" >/dev/null
+state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const i=JSON.parse(d).issues.find(x=>x.key==="TT-7");process.exit(i.fields.status==="Testing"?0:1)})' || fail "testing status did not transition"
+
+# --- watch-merge flips review → testing on MERGED --------------------------------
+sed -i 's/^status: todo/status: review/' "$REPO/jira/tasks/widget-b.md"
+PATH="$STUB:$PATH" GH_STUB_STATE=MERGED node "$GITFLOW" watch-merge widget-b --repo "$REPO" >/dev/null 2>&1 || fail "watch-merge MERGED should exit 0"
+grep -q '^status: testing' "$REPO/jira/tasks/widget-b.md" || fail "watch-merge did not flip review → testing"
+state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const i=JSON.parse(d).issues.find(x=>x.key==="TT-4");process.exit(i.fields.status==="Testing"?0:1)})' || fail "watch-merge flip did not sync to Jira"
+
 # --- malformed labels refused up front ------------------------------------------
 cat > "$REPO/jira/config.json" <<'EOF'
 { "site": "mock.invalid", "projectKey": "TT", "labels": ["has space"],

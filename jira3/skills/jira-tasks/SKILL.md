@@ -20,7 +20,8 @@ short kebab slug). Frontmatter:
 | Key        | Values                                     | Who writes it                          |
 | ---------- | ------------------------------------------ | -------------------------------------- |
 | `summary`  | one line, imperative                       | you, at creation                       |
-| `status`   | `todo` → `in_progress` → `review` → `done` | you, at the lifecycle moments below    |
+| `status`   | `todo` → `in_progress` → `review` → (`testing` →) `done` | you, at the lifecycle moments below — `testing` exists only when config.json's statusMap defines it, and is normally flipped by the merge-watch, not by you |
+| `owner` / `reviewer` / `tester` | Jira user reference (name, email, or accountId; `[a, b]` for several) | you, only to OVERRIDE the config `roleFields` defaults — omit otherwise |
 | `type`     | any key of config.json `types` (template: `epic`/`task`/`feature`/`bug`) | you, at creation — the project's config owns the vocabulary; `container: true` types (e.g. epic) hold children, the `default: true` type applies when omitted. Typical split: feature = user-facing capability, task = internal engineering, bug = defect |
 | `epic`     | local id of the parent epic                | you, at creation                       |
 | `deps`     | `[other-ids]` (informational)              | you, at creation                       |
@@ -64,6 +65,11 @@ epics typically don't carry these sections at all.
   warns and waits; the next write of the file retries). So a bare flip no
   longer publishes the placeholder — but Jira also doesn't move until a write
   carrying the real report lands.
+- **`testing`** (only in projects whose statusMap defines it): flipped
+  AUTOMATICALLY by the merge-watch when the human merges the task's PR — you
+  never flip it yourself in the normal flow. The Jira side hands the issue to
+  its Tester (project automation on the transition). A task in `testing` is
+  merged but not accepted; keep working the next task, don't wait on it.
 - **`done` + `approved: true`**: ONLY on the human's explicit, unambiguous
   word for that item ("T1 is done", "mark the ramp item done"). A bare "ok" /
   "thanks" / silence is NOT approval. The CLI refuses to transition done
@@ -178,13 +184,16 @@ watch so the session continues the moment the human merges:
 node <plugin>/bin/git-flow.mjs watch-merge <task-id>
 ```
 
-When it fires **MERGED**: pull the epic branch and start the next `todo` task in the
-epic — full lifecycle (branch → in_progress flip → TDD → gates → auto-review → PR →
-its own merge-watch). No Jira comment for the merge (the Development panel tracks it).
-When it fires **CLOSED** (closed without merge): stop and surface to the human.
+When it fires **MERGED**: the watcher itself flips the task `review` → `testing`
+and syncs (only in projects whose statusMap defines `testing` — elsewhere the task
+stays in `review`); you then pull the epic branch and start the next `todo` task in
+the epic — full lifecycle (branch → in_progress flip → TDD → gates → auto-review →
+PR → its own merge-watch). No Jira comment for the merge (the Development panel
+tracks it). When it fires **CLOSED** (closed without merge): stop and surface to
+the human.
 
-**A merge is NOT the done word.** The merged task stays in `review`; `done` +
-`approved: true` still requires the human's explicit per-item word.
+**A merge is NOT the done word.** The merged task sits in `testing` (or `review`);
+`done` + `approved: true` still requires the human's explicit per-item word.
 
 ## Activity log — jira/activity.jsonl
 

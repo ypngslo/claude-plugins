@@ -9,7 +9,7 @@
 import http from 'node:http';
 
 const port = Number(process.argv[2] ?? 8199);
-const STATUSES = ['To Do', 'In Progress', 'Testing', 'Done'];
+const STATUSES = ['To Do', 'In Progress', 'In Review', 'Testing', 'Done'];
 
 const issues = new Map(); // key → { key, fields: {summary, description, labels, status, parent}, comments: [] }
 let sequence = 0;
@@ -35,6 +35,13 @@ http
     if (url.pathname === '/__state') return json(res, 200, { issues: [...issues.values()], counters });
 
     if (!req.headers.authorization?.startsWith('Basic ')) return json(res, 401, { err: 'no auth' });
+
+    // GET /rest/api/2/user/search?query=… — deterministic accountId per query.
+    if (req.method === 'GET' && url.pathname === '/rest/api/2/user/search') {
+      const q = url.searchParams.get('query') ?? '';
+      const slug = q.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return json(res, 200, [{ accountId: `acc:${slug}`, displayName: q, accountType: 'atlassian' }]);
+    }
 
     // POST /rest/api/2/issue
     if (req.method === 'POST' && url.pathname === '/rest/api/2/issue') {

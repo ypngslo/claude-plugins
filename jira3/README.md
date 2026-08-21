@@ -78,7 +78,8 @@ label so identical task ids in two repos can't collide.
 | ------------- | ------------------ | ------------------------------------------------ |
 | `todo`        | To Do              | item is planned (file created)                   |
 | `in_progress` | In Progress        | work actually starts                             |
-| `review`      | Testing            | implemented + gates green + auto-review clean; `## Report` filled in |
+| `review`      | In Review          | implemented + gates green + auto-review clean; `## Report` filled in |
+| `testing`     | Testing            | (optional — only when statusMap defines it) flipped by the merge-watch when the PR merges |
 | `done`        | Done               | **the human's explicit word only** (`approved: true`) |
 
 ### Auto-review gate
@@ -105,6 +106,27 @@ present, so issue types whose screens lack the field (e.g. Epics) are never
 touched; deleting a section leaves the field's last value in Jira (blank the
 section's content to clear it deliberately). The mapped field must be a
 plain-text field on the work type's screen.
+
+### Role fields (Owner / Reviewer / Tester)
+
+Optional config `roleFields` maps role names to Jira user-picker (array)
+fields with per-repo defaults:
+
+```json
+"roleFields": {
+  "owner":    { "field": "customfield_10075", "default": ["<accountId or name>"] },
+  "reviewer": { "field": "customfield_10076", "default": ["Ben"] },
+  "tester":   { "field": "customfield_10077", "default": ["masha@example.com"] }
+}
+```
+
+Every non-container issue gets the fields on create and update; a task's
+frontmatter overrides per role (`owner: Ben`, or `owner: [a@x.com, b@x.com]`).
+References resolve to accountIds via `/user/search` (cached in
+`.sync-state.json`); bare accountIds pass through. Epics never receive the
+fields (their screens typically lack them). Pairs well with a Jira automation
+that re-assigns the issue from these fields on status transitions — e.g.
+assign the Reviewer on In Review, the Tester on Testing.
 
 ## Commands / CLI
 
@@ -135,7 +157,9 @@ computes them and no model tokens are spent on ceremony.
   conclusion** (never trust a wrapper exit code); exits non-zero on any red job.
 - `merged <task-id>` — exit 0 iff the task's PR is merged (one-shot check).
 - `watch-merge <task-id> [--interval-sec 60]` — blocks until the PR reaches a
-  terminal state: exit 0 on MERGED, 1 on CLOSED-without-merge. The session arms
+  terminal state: exit 0 on MERGED (also flipping the task review → testing when
+  the statusMap defines `testing`, so Jira hands it to the Tester), 1 on
+  CLOSED-without-merge. The session arms
   it as a background command after the review flip, so the human's merge click
   wakes the workflow and the next todo task starts — a webhook with no server.
 

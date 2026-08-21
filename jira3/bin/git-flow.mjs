@@ -234,9 +234,34 @@ function cmdMerged(id) {
 }
 
 /**
+ * After a merge, flip the task review → testing when the project's statusMap
+ * defines a testing status — the Jira side then hands the issue to the Tester
+ * (e.g. via a project automation on the transition). Best effort: a failed
+ * flip or sync is retried by the next hook-triggered sync; `done` still
+ * requires the human's explicit word regardless.
+ */
+function flipToTesting(id) {
+  try {
+    const config = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, 'jira', 'config.json'), 'utf8')
+    );
+    if (!config.statusMap?.testing) return;
+    const task = loadTask(id);
+    if (task.fields.status !== 'review') return;
+    fs.writeFileSync(task.filePath, setFrontmatterKey(task.raw, 'status', 'testing'));
+    log(`${id} review → testing (PR merged)`);
+    const syncPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'jira-sync.mjs');
+    execFileSync(process.execPath, [syncPath, 'sync', '--repo', repoRoot], { stdio: 'ignore' });
+  } catch (error) {
+    warn(`testing flip for ${id} incomplete: ${String(error.message).slice(0, 200)} — the next sync retries`);
+  }
+}
+
+/**
  * Block until the task's PR reaches a terminal state; exit 0 on MERGED,
  * 1 on CLOSED. Run via a background Bash until-notification — the merge-watch
- * that lets the human steer the pipeline by merging.
+ * that lets the human steer the pipeline by merging. On MERGED the watcher
+ * also flips the task review → testing (see flipToTesting).
  */
 async function cmdWatchMerge(id) {
   const ghConfig = loadGithubConfig();
@@ -258,6 +283,7 @@ async function cmdWatchMerge(id) {
     }
     if (pr?.state === 'MERGED') {
       log(`${name} MERGED at ${pr.mergedAt}`);
+      flipToTesting(id);
       return;
     }
     if (pr?.state === 'CLOSED') die(`${name} PR CLOSED without merge`, 1);
