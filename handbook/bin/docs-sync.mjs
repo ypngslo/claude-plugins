@@ -197,6 +197,17 @@ const DEFAULT_KINDS = {
     requiredSections: [],
   },
   reference: { label: 'reference', requireSources: true, allowCodeBlocks: true, requiredSections: [] },
+  // The one-off page: anything a human explicitly asks to put in Confluence
+  // (a decision record, an explainer, a runbook). No sources, code allowed,
+  // and the audience vocabulary rules do not apply — the secret scan and the
+  // structure rules still do. Its publish is the human's request itself.
+  general: {
+    label: 'general',
+    requireSources: false,
+    allowCodeBlocks: true,
+    audienceLint: false,
+    requiredSections: [],
+  },
 };
 
 const DEFAULT_CODE_LANGUAGES = [
@@ -206,9 +217,11 @@ const DEFAULT_CODE_LANGUAGES = [
 
 /**
  * Structure is the tool's business, vocabulary is the project's: docs-sync knows
- * only the four structural properties, never what a kind means. config `kinds`
+ * only the five structural properties, never what a kind means. config `kinds`
  * is spread OVER the default bank so a project adds or replaces kinds wholesale;
  * a partial entry inherits the neutral defaults rather than undefined.
+ * `audienceLint` defaults to TRUE — a kind opts out of the audience vocabulary
+ * rules only by saying so (the secret scan and structure rules never switch off).
  */
 export function resolveKinds(config) {
   const merged = { ...DEFAULT_KINDS, ...(config?.kinds ?? {}) };
@@ -218,6 +231,7 @@ export function resolveKinds(config) {
       label: value?.label ?? key,
       requireSources: value?.requireSources === true,
       allowCodeBlocks: value?.allowCodeBlocks === true,
+      audienceLint: value?.audienceLint !== false,
       requiredSections: Array.isArray(value?.requiredSections) ? value.requiredSections : [],
     };
   }
@@ -674,8 +688,16 @@ function planPage(page, deps) {
   return { page, action: 'publish', pageId, title, storage, hash: fnv1a(storage) };
 }
 
+/**
+ * Where a page mounts: `parentId:` (a raw Confluence page id — for pages that
+ * belong under a page handbook does not manage) wins; then `parent:` (a suite
+ * slug, resolved to the id written back on that page or held in state); then
+ * the configured root. Lint refuses a page that sets both.
+ */
 function resolveParentId(page, deps) {
   const { config, state, bySlug } = deps;
+  const rawId = page.error ? '' : String(page.fields.parentId ?? '').trim();
+  if (/^\d+$/.test(rawId)) return rawId;
   const parent = parentSlugOf(page);
   if (!parent) return String(config.parentPageId || '');
   const parentPage = bySlug.get(parent);

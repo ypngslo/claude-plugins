@@ -1,7 +1,7 @@
 {
   "name": "handbook",
   "description": "Non-technical product documentation in Confluence, derived from the codebase. Page files in the repo are the source of truth; a zero-dependency CLI mirrors them one-way via detached hooks — the model never talks to Confluence. Staleness is derived from git history; an audience gate blocks jargon, code, secrets, and unverified claims from publishing. First publish and retire require explicit human approval.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": {
     "name": "Mickey Malotte"
   }

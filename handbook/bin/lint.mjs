@@ -19,6 +19,10 @@
  *   - identifier / path / command / protocol shapes never fire inside fenced
  *     code blocks (the command rule deliberately still reads inline code
  *     spans — a backticked `git push` is exactly what it is hunting).
+ *   - a kind with `audienceLint: false` (the default `general` kind — one-off
+ *     pages a human explicitly asked for) skips the vocabulary rules and the
+ *     readability warnings entirely; the secret scan, the structure rules and
+ *     the claim-marker rules still run on it.
  *   - secret findings are NEVER waivable and NEVER echo what they matched.
  */
 import fs from 'node:fs';
@@ -96,6 +100,8 @@ function normalizeKind(kind) {
     label: kind?.label ?? null,
     requireSources: kind?.requireSources === true,
     allowCodeBlocks: kind?.allowCodeBlocks === true,
+    // Opt-out only: an unknown kind, or one that says nothing, gets the full gate.
+    audienceLint: kind?.audienceLint !== false,
     requiredSections: Array.isArray(kind?.requiredSections) ? kind.requiredSections : [],
   };
 }
@@ -323,10 +329,15 @@ export function lintPage(page, suite, config) {
 
   secretScan(lines, cfg, page, error);
   structureRules({ page, fields, slug, kind, cfg, pages, lines, bodyStart, localStart, inFence, opens, frontLine, at, error, warn });
-  contentRules({ cfg, lines, bodyStart, localStart, inFence, claims, at, error });
   claimRules({ lines, bodyStart, localStart, inFence, claims, at, error, warn });
-  readabilityRules({ page, cfg, lines, bodyStart, localStart, inFence, at, warn });
-  wallOfText({ lines, bodyStart, localStart, inFence, claims, at, warn });
+  // The audience half of the gate — vocabulary shapes, jargon, readability,
+  // wall-of-text — applies only to kinds that face the PM reader. A
+  // `general` page carries whatever the human asked to publish.
+  if (kind.audienceLint) {
+    contentRules({ cfg, lines, bodyStart, localStart, inFence, claims, at, error });
+    readabilityRules({ page, cfg, lines, bodyStart, localStart, inFence, at, warn });
+    wallOfText({ lines, bodyStart, localStart, inFence, claims, at, warn });
+  }
 
   return { errors, warns };
 }
@@ -388,6 +399,13 @@ function structureRules(x) {
   }
 
   const parent = typeof fields.parent === 'string' ? fields.parent.trim() : '';
+  const parentId = fields.parentId === undefined || fields.parentId === null ? '' : String(fields.parentId).trim();
+  if (parentId && !/^\d+$/.test(parentId)) {
+    error('parent-id', frontLine('parentId'), `parentId "${parentId}" is not a Confluence page id — digits only (the number in the page URL)`);
+  }
+  if (parentId && parent) {
+    error('parent-conflict', frontLine('parentId'), 'set parent: (a suite slug) OR parentId: (a raw Confluence page id), not both');
+  }
   if (parent) {
     if (!pages.has(parent)) {
       error('parent-missing', frontLine('parent'), `parent "${parent}" has no page file in confluence/pages/`);
