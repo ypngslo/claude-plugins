@@ -14,9 +14,14 @@
  *     this is the mechanical backstop.
  *
  * Commands:
- *   jira-sync.mjs init   [--repo <dir>]             scaffold jira/ in a repo
- *   jira-sync.mjs sync   [--repo <dir>] [--dry-run] push local → Jira
- *   jira-sync.mjs pull   [--repo <dir>]             drift REPORT only (no writes, either side)
+ *   jira-sync.mjs init     [--repo <dir>]             scaffold jira/ in a repo
+ *   jira-sync.mjs sync     [--repo <dir>] [--dry-run] push local → Jira
+ *   jira-sync.mjs pull     [--repo <dir>]             drift REPORT only (no writes, either side)
+ *   jira-sync.mjs comments [--repo <dir>] [--task <id>] [--status <status>]
+ *                          list Jira comments on tracked issues (read-only) —
+ *                          the one sanctioned way to READ from Jira: humans
+ *                          comment on issues, and those words never reach the
+ *                          task files any other way
  *
  * Config: jira/config.json (per repo — site/project/status map; optional
  * `labels` to scope issues per repo when several repos share one Jira
@@ -38,10 +43,13 @@ import { fileURLToPath } from 'node:url';
 const argv = process.argv.slice(2);
 const command = argv[0];
 const flags = new Set(argv.filter((a) => a.startsWith('--')));
-const repoFlagIndex = argv.indexOf('--repo');
-const repoRoot = path.resolve(
-  repoFlagIndex !== -1 && argv[repoFlagIndex + 1] ? argv[repoFlagIndex + 1] : process.cwd()
-);
+const flagValue = (name) => {
+  const index = argv.indexOf(name);
+  return index !== -1 && argv[index + 1] && !argv[index + 1].startsWith('--')
+    ? argv[index + 1]
+    : null;
+};
+const repoRoot = path.resolve(flagValue('--repo') ?? process.cwd());
 const DRY = flags.has('--dry-run');
 
 const JIRA_DIR = path.join(repoRoot, 'jira');
@@ -567,6 +575,65 @@ async function pullReport(config, request, state) {
 }
 
 // ---------------------------------------------------------------------------
+// comments (read-only: list Jira comments on tracked issues)
+// ---------------------------------------------------------------------------
+// The mirror is one-way for CONTENT, but humans talk on the Jira side —
+// review notes, priority calls, questions — and none of that ever reaches the
+// task files. This is the sanctioned read path for those words: fetch and
+// print, never write (neither to Jira nor to the task files — what a human
+// said in a comment is theirs to act on, not sync state).
+async function commentsReport(config, request, state) {
+  const tasks = loadTasks(config);
+  const onlyTask = flagValue('--task');
+  const onlyStatus = flagValue('--status');
+  if (onlyTask && !tasks.some((t) => t.id === onlyTask)) {
+    warn(`--task ${onlyTask}: no such task file`);
+    process.exit(2);
+  }
+  if (onlyStatus && !VALID_STATUSES.includes(onlyStatus)) {
+    warn(`--status ${onlyStatus}: must be one of ${VALID_STATUSES.join('/')}`);
+    process.exit(2);
+  }
+  let checked = 0;
+  let withComments = 0;
+  let failures = 0;
+  for (const task of tasks) {
+    if (onlyTask && task.id !== onlyTask) continue;
+    if (onlyStatus && task.fields.status !== onlyStatus) continue;
+    const jiraKey = task.fields.jiraKey || state.tasks[task.id]?.jiraKey;
+    if (!jiraKey) continue;
+    checked += 1;
+    try {
+      // One GET per issue: the comment page rides the issue fields, and the
+      // live status comes along free (often more current than the local file).
+      const issue = await request('GET', `/issue/${jiraKey}?fields=status,comment`);
+      const page = issue.fields?.comment ?? {};
+      const comments = page.comments ?? [];
+      if (!comments.length) continue;
+      withComments += 1;
+      log(
+        `${jiraKey} ${task.id} (Jira: ${issue.fields.status?.name ?? 'unknown'}): ${comments.length} comment(s)`
+      );
+      for (const comment of comments) {
+        const when = String(comment.created ?? '').slice(0, 16).replace('T', ' ');
+        process.stdout.write(`  — ${comment.author?.displayName ?? 'unknown'} · ${when}\n`);
+        for (const line of String(comment.body ?? '').split('\n')) {
+          process.stdout.write(`    ${line}\n`);
+        }
+      }
+      if (typeof page.total === 'number' && page.total > comments.length) {
+        log(`${jiraKey}: showing ${comments.length} of ${page.total} — read the rest in Jira`);
+      }
+    } catch (error) {
+      failures += 1;
+      warn(`${task.id}: ${error.message}`);
+    }
+  }
+  log(`${withComments} of ${checked} tracked issue(s) have comments`);
+  if (failures > 0) process.exitCode = 1;
+}
+
+// ---------------------------------------------------------------------------
 // init
 // ---------------------------------------------------------------------------
 function init() {
@@ -592,8 +659,10 @@ function init() {
 // ---------------------------------------------------------------------------
 async function main() {
   if (command === 'init') return init();
-  if (command !== 'sync' && command !== 'pull') {
-    warn('usage: jira-sync.mjs <init|sync|pull> [--repo <dir>] [--dry-run]');
+  if (!['sync', 'pull', 'comments'].includes(command)) {
+    warn(
+      'usage: jira-sync.mjs <init|sync|pull|comments> [--repo <dir>] [--dry-run] [--task <id>] [--status <status>]'
+    );
     process.exit(2);
   }
 
@@ -603,6 +672,9 @@ async function main() {
 
   if (command === 'pull') {
     return pullReport(config, request, loadState());
+  }
+  if (command === 'comments') {
+    return commentsReport(config, request, loadState());
   }
 
   if (!acquireLock()) return; // rerun queued; current holder will pick it up

@@ -78,7 +78,19 @@ http
       if (req.method === 'GET' && parts.length === 5) {
         return json(res, 200, {
           key,
-          fields: { summary: issue.fields.summary, status: { name: issue.fields.status } },
+          fields: {
+            summary: issue.fields.summary,
+            status: { name: issue.fields.status },
+            comment: {
+              total: issue.comments.length,
+              comments: issue.comments.map((body, index) => ({
+                id: String(index + 1),
+                author: { displayName: 'Mock Commenter' },
+                created: '2026-01-01T00:00:00.000Z',
+                body,
+              })),
+            },
+          },
         });
       }
       if (parts[5] === 'transitions') {

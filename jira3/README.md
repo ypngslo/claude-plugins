@@ -38,6 +38,9 @@ jira/tasks/<id>.md  ──(model edits status/report)──▶  PostToolUse hook
 - **One-way by design** — local files are authoritative. `pull` produces a
   drift *report* only (someone edited Jira directly); reconcile by editing
   the local files. Bidirectional merge is deliberately out of scope.
+  `comments` is the one sanctioned read: humans talk on the Jira side
+  (review notes, questions, priority calls), and it lists those comments on
+  tracked issues without writing anything anywhere.
 - **No MCP, no dependencies** — direct REST v2 with an API token from env;
   works in hooks, cron, and headless runs. Node ≥ 20, zero npm deps.
 
@@ -137,6 +140,9 @@ assign the Reviewer on In Review, the Tester on Testing.
 - `/jira3:sync` — force a push now and report (hooks make this rarely needed).
 - `bin/jira-sync.mjs sync --repo <dir> [--dry-run]` — the push reconcile.
 - `bin/jira-sync.mjs pull --repo <dir>` — read-only drift report.
+- `bin/jira-sync.mjs comments --repo <dir> [--task <id>] [--status <status>]`
+  — read-only listing of Jira comments on tracked issues (author, timestamp,
+  body, live Jira status), filterable to one task or one local status.
 - `bin/git-flow.mjs branch|pr|ci|merged|watch-merge …` — git/GitHub ceremony (below).
 - `bin/activity-log.mjs` — hook-driven agent-activity logger (below).
 - `/jira3:report` / `bin/activity-report.mjs --repo <dir> [--since <ISO>] [--session <prefix>]`
