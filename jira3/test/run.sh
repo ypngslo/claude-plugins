@@ -2,8 +2,9 @@
 # End-to-end test of jira-sync against the in-memory mock Jira.
 # Covers: init, create+writeback, epic parenting, content update, the review
 # gate (no transition on empty/placeholder report), transition with report
-# comment, the done-approval gate, idempotent re-run, drift pull, repo-scoping
-# labels (namespaced marker on create, additive retro-tag on update).
+# comment, the done-approval gate, idempotent re-run, drift pull, the
+# read-only comments listing, repo-scoping labels (namespaced marker on
+# create, additive retro-tag on update).
 set -euo pipefail
 
 PLUGIN="$(cd "$(dirname "$0")/.." && pwd)"
@@ -159,6 +160,26 @@ BEFORE="$(state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()
 node "$CLI" sync --repo "$REPO" >/dev/null
 AFTER="$(state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).counters.comment))')"
 [ "$BEFORE" = "$AFTER" ] || fail "rework comment duplicated on idempotent re-run"
+
+# --- comments: read-only listing of Jira comments on tracked issues ------------
+# At this point TT-2 (widget-a) carries its report comment, TT-4 (widget-b) the
+# rework comment, and TT-3 (env-file-check) has none.
+BEFORE_COUNTS="$(state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const c=JSON.parse(d).counters;console.log(`${c.create},${c.update},${c.transition},${c.comment}`)})')"
+OUT="$(node "$CLI" comments --repo "$REPO")"
+echo "$OUT" | grep -q 'TT-4 widget-b' || fail "comments did not list widget-b"
+echo "$OUT" | grep -q 'off-by-one in rotation loop' || fail "comments did not print the comment body"
+echo "$OUT" | grep -q 'Mock Commenter' || fail "comments did not print the author"
+echo "$OUT" | grep -q 'TT-3' && fail "comments listed an issue with no comments"
+echo "$OUT" | grep -q '2 of 4 tracked issue(s) have comments' || fail "comments summary line wrong"
+OUT="$(node "$CLI" comments --repo "$REPO" --task widget-a)"
+echo "$OUT" | grep -q 'commit abc123' || fail "comments --task did not show the report comment"
+echo "$OUT" | grep -q 'widget-b' && fail "comments --task did not filter"
+OUT="$(node "$CLI" comments --repo "$REPO" --status in_progress)"
+echo "$OUT" | grep -q 'widget-' && fail "comments --status did not filter"
+node "$CLI" comments --repo "$REPO" --task no-such-task >/dev/null 2>&1 && fail "comments accepted an unknown --task"
+node "$CLI" comments --repo "$REPO" --status bogus >/dev/null 2>&1 && fail "comments accepted an unknown --status"
+AFTER_COUNTS="$(state | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const c=JSON.parse(d).counters;console.log(`${c.create},${c.update},${c.transition},${c.comment}`)})')"
+[ "$BEFORE_COUNTS" = "$AFTER_COUNTS" ] || fail "comments performed a write (counters $BEFORE_COUNTS → $AFTER_COUNTS)"
 
 # --- git-flow merged: exit 0 iff the task's PR is merged (stubbed gh) ----------
 GITFLOW="$PLUGIN/bin/git-flow.mjs"

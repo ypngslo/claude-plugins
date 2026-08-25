@@ -128,6 +128,12 @@ pass.
 - `node <plugin>/bin/jira-sync.mjs pull --repo .` — drift report (someone
   edited Jira directly). Local files stay authoritative; reconcile by editing
   them.
+- `node <plugin>/bin/jira-sync.mjs comments --repo . [--task <id>] [--status <status>]`
+  — read-only listing of Jira comments on tracked issues. This is the ONE
+  sanctioned way to read from Jira (the "never call Jira" rule stands for
+  everything else): humans leave review notes and questions as comments, and
+  this command is how you see them. It writes nothing — what a human said in
+  a comment is input for you to act on, never sync state.
 
 ## GitHub flow — branches and PRs are derived, never improvised
 
